@@ -68,8 +68,9 @@ public class SimpleMessengerActivity extends Activity {
          */
         TelephonyManager tel = (TelephonyManager) this.getSystemService(Context.TELEPHONY_SERVICE);
         String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
+        //Log.e(TAG,"Line number : " + tel.getLine1Number());
         final String myPort = String.valueOf((Integer.parseInt(portStr) * 2));
-
+        Log.e(TAG,"Port number : " + myPort);
         try {
             /*
              * Create a server socket as well as a thread (AsyncTask) that listens on the server
@@ -162,13 +163,20 @@ public class SimpleMessengerActivity extends Activity {
              * to onProgressUpdate().
              */
             try {
-                Socket clientSocket = serverSocket.accept();
+                Socket socket = serverSocket.accept();
                 //https://docs.oracle.com/javase/tutorial/networking/sockets/clientServer.html
-                BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-                String msgRecieved = in.readLine();
-                Log.e(TAG,"Message received : " + msgRecieved);
-                publishProgress(msgRecieved);
-
+                BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                while(true) {
+                    String msgRecieved = in.readLine();
+                    if (msgRecieved!=null) {
+                        Log.e(TAG, "Message received : " + msgRecieved);
+                        publishProgress(msgRecieved);
+                    }
+                    else{
+                        Log.e(TAG,"Message received : " + msgRecieved);
+                        break;
+                    }
+                }
 
             } catch (IOException e) {
                 e.printStackTrace();
@@ -229,23 +237,22 @@ public class SimpleMessengerActivity extends Activity {
                 if (msgs[1].equals(REMOTE_PORT0))
                     remotePort = REMOTE_PORT1;
 
-                Socket serverSocket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                         Integer.parseInt(remotePort));
                 
                 String msgToSend = msgs[0];
-                Log.e(TAG,"Message to send: " + msgToSend);
                 /*
                  * TODO: Fill in your client code that sends out a message.
                  */
                 //https://docs.oracle.com/javase/tutorial/networking/sockets/clientServer.html
-                new PrintWriter(serverSocket.getOutputStream()).println(msgToSend);
-                serverSocket.close();
+                Log.e(TAG, "Message to send: " + msgToSend);
+                PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                out.println(msgToSend);
+
             } catch (UnknownHostException e) {
                 Log.e(TAG, "ClientTask UnknownHostException");
             } catch (IOException e) {
                 Log.e(TAG, "ClientTask socket IOException");
-            } catch (NullPointerException ne){
-                Log.e(TAG, "Nullpointerexception at sender side");
             }
 
             return null;
