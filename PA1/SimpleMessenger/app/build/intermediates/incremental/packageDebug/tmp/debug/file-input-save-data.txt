@@ -1,5 +1,5 @@
 #Internal package file, do not edit.
-#Wed Jan 30 20:40:48 EST 2019
+#Wed Jan 30 23:52:27 EST 2019
 0.baseType=DIRECTORY
 0.base=/home/baalaji/git_workspace/DS/PA1/SimpleMessenger/app/build/intermediates/dex/debug/mergeDexDebug/out
 0.path=classes.dex
