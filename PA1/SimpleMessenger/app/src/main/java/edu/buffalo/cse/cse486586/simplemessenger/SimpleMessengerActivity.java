@@ -26,6 +26,8 @@ import android.view.View.OnKeyListener;
 import android.widget.EditText;
 import android.widget.TextView;
 
+import javax.xml.transform.Result;
+
 /**
  * SimpleMessengerActivity creates an Activity (i.e., a screen) that has an input box and a display
  * box. This is almost like main() for a typical C or Java program.
@@ -82,6 +84,7 @@ public class SimpleMessengerActivity extends Activity {
              */
             ServerSocket serverSocket = new ServerSocket(SERVER_PORT);
             new ServerTask().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR, serverSocket);
+            Log.e(TAG,"Server socket closed");
         } catch (IOException e) {
             /*
              * Log is a good way to debug your code. LogCat prints out all the messages that
@@ -134,7 +137,9 @@ public class SimpleMessengerActivity extends Activity {
                      * the difference, please take a look at
                      * http://developer.android.com/reference/android/os/AsyncTask.html
                      */
+                    Log.e(TAG,"Client socket creation for message " + msg);
                     new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, msg, myPort);
+                    Log.e(TAG,"client socket closed for message " + msg);
                     return true;
                 }
                 return false;
@@ -164,8 +169,10 @@ public class SimpleMessengerActivity extends Activity {
              */
             try {
                 Socket socket = serverSocket.accept();
+                Log.e(TAG, "Connection request from client " + String.valueOf(socket.getRemoteSocketAddress()) + " accepted");
                 //https://docs.oracle.com/javase/tutorial/networking/sockets/clientServer.html
                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+                Log.e(TAG,"Input stream for the socket is created ");
                 while(true) {
                     String msgRecieved = in.readLine();
                     if (msgRecieved!=null) {
@@ -173,10 +180,14 @@ public class SimpleMessengerActivity extends Activity {
                         publishProgress(msgRecieved);
                     }
                     else{
-                        Log.e(TAG,"Message received : " + msgRecieved);
+                        Log.e(TAG,"Message received : " + msgRecieved );
                         break;
                     }
                 }
+                in.close();
+                //socket.close();
+                //Log.e(TAG,"Server socket closed");
+                Log.e(TAG,"Exiting server thread");
 
             } catch (IOException e) {
                 e.printStackTrace();
@@ -218,6 +229,7 @@ public class SimpleMessengerActivity extends Activity {
 
             return;
         }
+
     }
 
     /***
@@ -239,16 +251,19 @@ public class SimpleMessengerActivity extends Activity {
 
                 Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                         Integer.parseInt(remotePort));
+                Log.e(TAG,"client socket created for message " + msgs[0].trim());
                 
-                String msgToSend = msgs[0];
+                String msgToSend = msgs[0].trim();
                 /*
                  * TODO: Fill in your client code that sends out a message.
                  */
                 //https://docs.oracle.com/javase/tutorial/networking/sockets/clientServer.html
                 Log.e(TAG, "Message to send: " + msgToSend);
                 PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
+                Log.e(TAG,"Output stream created to server for message " + msgToSend);
                 out.println(msgToSend);
-
+                Log.e(TAG,"Message " + msgToSend + " sent");
+                Log.e(TAG,"Client socket for message " + msgToSend + "closed");
             } catch (UnknownHostException e) {
                 Log.e(TAG, "ClientTask UnknownHostException");
             } catch (IOException e) {
