@@ -274,3 +274,10 @@ public class SimpleMessengerActivity extends Activity {
         }
     }
 }
+
+/*
+****************************
+*********References*********
+****************************
+* //https://docs.oracle.com/javase/tutorial/networking/sockets/clientServer.html
+* */
