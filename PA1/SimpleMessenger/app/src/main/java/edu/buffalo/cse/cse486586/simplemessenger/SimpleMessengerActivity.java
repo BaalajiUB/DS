@@ -180,7 +180,7 @@ public class SimpleMessengerActivity extends Activity {
                         publishProgress(msgRecieved);
                     }
                     else{
-                        Log.e(TAG,"Message received : " + msgRecieved );
+                        Log.e(TAG,"Message received : " + msgRecieved);
                         break;
                     }
                 }
@@ -253,7 +253,7 @@ public class SimpleMessengerActivity extends Activity {
                         Integer.parseInt(remotePort));
                 Log.e(TAG,"client socket created for message " + msgs[0].trim());
                 
-                String msgToSend = msgs[0].trim();
+                String msgToSend = msgs[0].trim(); //without trimming, it is sending an empty message which is treated as null.
                 /*
                  * TODO: Fill in your client code that sends out a message.
                  */
