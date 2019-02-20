@@ -1,0 +1,4 @@
+#Wed Feb 20 15:51:09 EST 2019
+base.0=/home/baalaji/git_workspace/DS/PA2/SimpleMessenger/app/build/intermediates/dex/debug/mergeDexDebug/out
+path.0=classes.dex
+renamed.0=classes.dex

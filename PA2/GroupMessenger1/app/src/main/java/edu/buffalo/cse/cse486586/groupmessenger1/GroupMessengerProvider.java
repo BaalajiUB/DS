@@ -12,7 +12,7 @@ import android.util.Log;
  * to use it as a key-value table.
  * 
  * Please read:
- *
+ * 
  * http://developer.android.com/guide/topics/providers/content-providers.html
  * http://developer.android.com/reference/android/content/ContentProvider.html
  * 
@@ -50,7 +50,6 @@ public class GroupMessengerProvider extends ContentProvider {
          * internal storage option that we used in PA1. If you want to use that option, please
          * take a look at the code for PA1.
          */
-
         Log.v("insert", values.toString());
         return uri;
     }

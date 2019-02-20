@@ -1,4 +1,0 @@
-#Wed Feb 13 12:39:30 EST 2019
-base.0=/home/baalaji/git_workspace/DS/PA2/GroupMessenger1/app/build/intermediates/dex/debug/mergeDexDebug/out
-path.0=classes.dex
-renamed.0=classes.dex
