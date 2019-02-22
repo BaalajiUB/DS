@@ -1,10 +1,14 @@
 package edu.buffalo.cse.cse486586.groupmessenger1;
 
 import android.content.ContentProvider;
+import android.content.ContentUris;
 import android.content.ContentValues;
 import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.net.Uri;
 import android.util.Log;
+
+import java.security.Key;
 
 /**
  * GroupMessengerProvider is a key-value table. Once again, please note that we do not implement
@@ -25,6 +29,18 @@ import android.util.Log;
  *
  */
 public class GroupMessengerProvider extends ContentProvider {
+
+    private DBHelper dbh;
+    private static final String key = "key";
+    private static final String value = "value";
+
+    @Override
+    public boolean onCreate() {
+        // If you need to perform any one-time initialization task, please do it here.
+        dbh = new DBHelper(getContext());
+        return dbh!=null;
+    }
+
 
     @Override
     public int delete(Uri uri, String selection, String[] selectionArgs) {
@@ -50,14 +66,16 @@ public class GroupMessengerProvider extends ContentProvider {
          * internal storage option that we used in PA1. If you want to use that option, please
          * take a look at the code for PA1.
          */
+        SQLiteDatabase db = dbh.getWritableDatabase();
+        long newRowId = db.replace(DBHelper.TABLE_NAME, null, values);
+        Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
         Log.v("insert", values.toString());
-        return uri;
-    }
+        Log.v("insert",resultUri.toString());
+        if (newRowId == -1){
+            Log.v("insert","Insertion failed");
+        }
 
-    @Override
-    public boolean onCreate() {
-        // If you need to perform any one-time initialization task, please do it here.
-        return false;
+        return resultUri;
     }
 
     @Override
@@ -80,7 +98,18 @@ public class GroupMessengerProvider extends ContentProvider {
          * recommend building a MatrixCursor described at:
          * http://developer.android.com/reference/android/database/MatrixCursor.html
          */
-        Log.v("query", selection);
-        return null;
+        SQLiteDatabase db = dbh.getReadableDatabase();
+        Cursor cursor;
+        cursor = db.query(
+                DBHelper.TABLE_NAME,   // The table to query
+                projection,             // The array of columns to return (pass null to get all)
+                "key='" + selection + "'",              // The columns for the WHERE clause
+                selectionArgs,          // The values for the WHERE clause
+                null,                   // don't group the rows
+                null,                   // don't filter by row groups
+                null               // The sort order
+        );
+        //Log.v("query", selection);
+        return cursor;
     }
 }
