@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.PriorityQueue;
 
@@ -47,6 +48,7 @@ public class GroupMessengerActivity extends Activity{
     private static final String key = "key";
     private static final String value = "value";
 
+    private int WRITE_COUNTER = 0;
     private int MSG_COUNTER = 0;
     private int SEQUENCE = 0;
     private PriorityQueue<ArrayList<Object>> BUFFER_QUEUE;
@@ -172,17 +174,23 @@ public class GroupMessengerActivity extends Activity{
                             int n = BUFFER_QUEUE.size();
                             int i = 0;
 
-                            while (i < n) {
-                                ArrayList<Object> arr = BUFFER_QUEUE.poll();
+                            PriorityQueue<ArrayList<Object>> TEMP_BUFFER_QUEUE = new PriorityQueue<ArrayList<Object>>(10, new CustomComparator());
+
+                            Iterator<ArrayList<Object>> itr = BUFFER_QUEUE.iterator();
+
+                            while (itr.hasNext()) {
+                                ArrayList<Object> arr = itr.next();
                                 Log.d("SERVER", arr.toString() + "\t  8.0");
                                 if (arr.get(0).toString().trim().equals(INPUT_MSG) && arr.get(1).toString().trim().equals(INPUT_MSG_ID.toString()) && arr.get(2).toString().trim().equals(INPUT_PORT)) {
                                     arr.set(3, MSG_SEQ);
                                     arr.set(4, true);
                                     Log.d("SERVER", arr.toString() + "\t 8");
                                 }
-                                BUFFER_QUEUE.add(arr);
-                                i += 1;
+                                TEMP_BUFFER_QUEUE.add(arr);
+                                i++;
                             }
+
+                            BUFFER_QUEUE = TEMP_BUFFER_QUEUE;
 
                             in.close();
                             socket.close();
@@ -196,7 +204,7 @@ public class GroupMessengerActivity extends Activity{
                                 ArrayList<Object> delivered = BUFFER_QUEUE.poll();
                                 Log.d("SERVER", delivered.toString() + "\t 9");
 
-                                publishProgress(delivered.get(0).toString().trim(), delivered.get(3).toString().trim()); //message to display in UI
+                                publishProgress(delivered.get(0).toString().trim()); //message to display in UI
                                 Log.i("DELIVERY", delivered.toString());
 
                                 if (BUFFER_QUEUE.size() != 0) {
@@ -229,18 +237,19 @@ public class GroupMessengerActivity extends Activity{
             Log.e(TAG, "Message in onProgressUpdate : " + strings[0]);
 
             String strReceived = strings[0].trim();
-            Integer ID = Integer.parseInt(strings[1].trim());
 
             TextView remoteTextView = (TextView) findViewById(R.id.textView1);
             remoteTextView.append("\t\t\t" + strReceived + "\n");
 
             ContentValues cv = new ContentValues();
-            cv.put(key,ID.toString());
+            cv.put(key,Integer.toString(WRITE_COUNTER));
             cv.put(value,strReceived);
             Uri t_uri = getContentResolver().insert(mUri,cv);
 
             Log.d("URI",t_uri.toString());
             Log.d("insert",cv.toString());
+
+            WRITE_COUNTER++;
 
             return;
         }
@@ -382,4 +391,11 @@ class CustomComparator implements Comparator<ArrayList<Object>> {
     }
 }
 
+
+// ** To run the grader
+// ./groupmessenger2-grading.linux ~/git_workspace/DS/PA2/GroupMessenger2/app/build/outputs/apk/debug/app-debug.apk
+
+//** https://stackoverflow.com/questions/25274296/adb-install-fails-with-install-failed-test-only
+//android:testOnly="false" in manifest file added
+//must rebuild app to recreate the apk file
 
