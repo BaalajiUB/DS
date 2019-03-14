@@ -313,6 +313,7 @@ public class GroupMessengerActivity extends Activity{
                     out.writeUTF(msg_seq.toString()); //<msg, MSG_COUNTER, MyPort, Final_sequence number>
                     out.flush();
 
+                    //Reference :: https://community.oracle.com/thread/1148113
                     Thread.sleep(500); //Since the socket seems to close before readUTF in server is completed, it throws EOFException. So, the sleep is added to keep the socket alive for some time.
                     out.close();
                     Log.d("CLIENT",msg_seq.toString() + "\t 6"); //<msg, MSG_COUNTER, MyPort, Final_sequence number>
