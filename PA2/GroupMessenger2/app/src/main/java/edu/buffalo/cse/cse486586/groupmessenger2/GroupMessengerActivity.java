@@ -101,8 +101,8 @@ public class GroupMessengerActivity extends Activity{
 
                 et.setText("");
 
-                TextView tv = (TextView) findViewById(R.id.textView1);
-                tv.append(cur + "\n");
+                //TextView tv = (TextView) findViewById(R.id.textView1);
+                //tv.append(cur + "\n");
                 new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR, cur, myPort);
                 Log.d("TV",cur);
             }
@@ -144,6 +144,12 @@ public class GroupMessengerActivity extends Activity{
 
                             Log.d("SERVER", msgRecieved.toString() + "\t 2"); //<msg, MSG_COUNTER, MyPort>
 
+/*
+                            Integer port = (Integer) msgRecieved.get(2);
+                            double port_id = (port-11108)/20;
+                            double seq_append = SEQUENCE + port_id;
+*/
+
                             msgRecieved.add(SEQUENCE);
 
                             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -177,7 +183,7 @@ public class GroupMessengerActivity extends Activity{
                             PriorityQueue<ArrayList<Object>> TEMP_BUFFER_QUEUE = new PriorityQueue<ArrayList<Object>>(10, new CustomComparator());
 
                             Iterator<ArrayList<Object>> itr = BUFFER_QUEUE.iterator();
-
+                            //int f = 0;
                             while (itr.hasNext()) {
                                 ArrayList<Object> arr = itr.next();
                                 Log.d("SERVER", arr.toString() + "\t  8.0");
@@ -185,9 +191,11 @@ public class GroupMessengerActivity extends Activity{
                                     arr.set(3, MSG_SEQ);
                                     arr.set(4, true);
                                     Log.d("SERVER", arr.toString() + "\t 8");
+                                    //f = 1;
                                 }
                                 TEMP_BUFFER_QUEUE.add(arr);
                                 i++;
+                                //if (f==1){break;}
                             }
 
                             BUFFER_QUEUE = TEMP_BUFFER_QUEUE;
@@ -375,7 +383,6 @@ public class GroupMessengerActivity extends Activity{
 class CustomComparator implements Comparator<ArrayList<Object>> {
 
     // Overriding compare()method of Comparator
-    // for descending order of cgpa
 
     public int compare(ArrayList<Object> arr1, ArrayList<Object> arr2) {
 
@@ -387,7 +394,28 @@ class CustomComparator implements Comparator<ArrayList<Object>> {
         else if (i1 < i2)
             return -1;
 
-        return 0;
+        else{
+            int p1 = Integer.parseInt(arr1.get(2).toString()), p2 = Integer.parseInt(arr2.get(2).toString());
+
+            if (p1 > p2)
+                return 1;
+
+            else if (p1 < p2)
+                return -1;
+
+            else{
+                int c1 = Integer.parseInt(arr1.get(1).toString()), c2 = Integer.parseInt(arr2.get(1).toString());
+
+                if (c1 > c2)
+                    return 1;
+
+                else if (c1 < c2)
+                    return -1;
+
+                else
+                    return 0;
+            }
+        }
     }
 }
 
