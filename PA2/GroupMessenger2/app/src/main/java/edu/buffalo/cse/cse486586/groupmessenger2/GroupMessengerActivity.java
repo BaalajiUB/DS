@@ -24,6 +24,7 @@ import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -32,6 +33,7 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 import java.util.PriorityQueue;
+import java.net.SocketTimeoutException;
 
 /**
  * GroupMessengerActivity is the main Activity for the assignment.
@@ -184,18 +186,24 @@ public class GroupMessengerActivity extends Activity{
 
                             Iterator<ArrayList<Object>> itr = BUFFER_QUEUE.iterator();
                             //int f = 0;
+
+                            List<String> lst = Arrays.asList(REMOTE_PORTS);
+
                             while (itr.hasNext()) {
                                 ArrayList<Object> arr = itr.next();
-                                Log.d("SERVER", arr.toString() + "\t  8.0");
-                                if (arr.get(0).toString().trim().equals(INPUT_MSG) && arr.get(1).toString().trim().equals(INPUT_MSG_ID.toString()) && arr.get(2).toString().trim().equals(INPUT_PORT)) {
-                                    arr.set(3, MSG_SEQ);
-                                    arr.set(4, true);
-                                    Log.d("SERVER", arr.toString() + "\t 8");
-                                    //f = 1;
+                                if(lst.contains(arr.get(2).toString().trim())) { //removes dead node data
+//                                if(lst.contains(arr.get(2).toString().trim()) || ((!lst.contains(arr.get(2).toString().trim())) && arr.get(4).toString().trim().equals("false"))) { //removes dead node data
+                                    Log.d("SERVER", arr.toString() + "\t  8.0");
+                                    if (arr.get(0).toString().trim().equals(INPUT_MSG) && arr.get(1).toString().trim().equals(INPUT_MSG_ID.toString()) && arr.get(2).toString().trim().equals(INPUT_PORT)) {
+                                        arr.set(3, MSG_SEQ);
+                                        arr.set(4, true);
+                                        Log.d("SERVER", arr.toString() + "\t 8");
+                                        //f = 1;
+                                    }
+                                    TEMP_BUFFER_QUEUE.add(arr);
+                                    i++;
+                                    //if (f==1){break;}
                                 }
-                                TEMP_BUFFER_QUEUE.add(arr);
-                                i++;
-                                //if (f==1){break;}
                             }
 
                             BUFFER_QUEUE = TEMP_BUFFER_QUEUE;
@@ -267,38 +275,42 @@ public class GroupMessengerActivity extends Activity{
         @Override
 
         protected Void doInBackground(String... msgs) {
-            try {
 
-                String msgToSend = msgs[0].trim();
-                int myPort = Integer.parseInt(msgs[1].trim());
-                Log.i("CLIENT", "Message to send : " +msgToSend);
+            String msgToSend = msgs[0].trim();
+            int myPort = Integer.parseInt(msgs[1].trim());
+            Log.i("CLIENT", "Message to send : " + msgToSend);
 
-                ArrayList<Integer> sequence_list = new ArrayList<Integer>();
-                int final_sequence_number = -1;
+            ArrayList<Integer> sequence_list = new ArrayList<Integer>();
+            int final_sequence_number = -1;
 
-                if (null != msgToSend || !msgToSend.isEmpty()) {
+            if (null != msgToSend || !msgToSend.isEmpty()) {
 
-                    ArrayList<Object> msg = new ArrayList<Object>();
-                    msg.add(msgToSend);
-                    MSG_COUNTER += 1;
-                    msg.add(MSG_COUNTER);
-                    msg.add(myPort);
+                ArrayList<Object> msg = new ArrayList<Object>();
+                msg.add(msgToSend);
+                MSG_COUNTER += 1;
+                msg.add(MSG_COUNTER);
+                msg.add(myPort);
 
-                    for (String port : REMOTE_PORTS) {
+                for (String port : REMOTE_PORTS) {
 
+                    try {
                         Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port));
+
+                        socket.setSoTimeout(500);
 
                         DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                         out.writeUTF(msg.toString()); //<msg, MSG_COUNTER, MyPort>
                         out.flush();
                         //out.close(); //only the last occurance of close() is executed to keep the socket alive
-                        Log.d("CLIENT",msg.toString() + "\t 1"); //<msg, MSG_COUNTER, MyPort>
+                        Log.d("CLIENT", msg.toString() + "\t 1"); //<msg, MSG_COUNTER, MyPort>
 
                         DataInputStream in = new DataInputStream(socket.getInputStream());
+
                         String inp = in.readUTF();
                         //Thread.sleep(200);
                         in.close();
                         socket.close();
+
 
                         if (null != inp) {
                             Log.d("CLIENT", inp + "\t 4"); //<MSG, MSG_ID, P_ID, SEQUENCE>
@@ -307,23 +319,52 @@ public class GroupMessengerActivity extends Activity{
                             Integer sequence_proposal = (Integer) input_list.get(3);
                             sequence_list.add(sequence_proposal);
 
-                            if (sequence_list.size() == 5) {
-                                final_sequence_number = Collections.max(sequence_list);
-                                Log.d("CLIENT", "All replies recieved" + "\t 5");
-                            }
+                            //if (sequence_list.size() == REMOTE_PORTS.length) {
+                            final_sequence_number = Collections.max(sequence_list);
+                            Log.d("CLIENT", "All replies recieved" + "\t 5");
+                            //}
                         }
+                    } catch (UnknownHostException e) {
+                        Log.e("CLIENT", "ClientTask UnknownHostException");
+                    } catch (SocketException e) {
+/*
+                        e.printStackTrace();
+                        Log.e("CRASH",port + " crashed");
+                        ArrayList<String> al = new ArrayList<String>(REMOTE_PORTS.length);
+                        for (String j : REMOTE_PORTS){al.add(j);}
+                        al.remove(port);
+                        REMOTE_PORTS = al.toArray(new String[al.size()]);
+
+                        continue;
+*/
+
+                    } catch (IOException e) {
+                        Log.e("CLIENT", "ClientTask socket IOException");
+                        e.printStackTrace();
+
+                        Log.e("CRASH",port + " crashed");
+                        ArrayList<String> al = new ArrayList<String>(REMOTE_PORTS.length);
+                        for (String j : REMOTE_PORTS){al.add(j);}
+                        al.remove(port);
+                        REMOTE_PORTS = al.toArray(new String[al.size()]);
+
+                        continue;
 
                     }
+
                 }
+            }
 
-                //multicasting <M,Sequence>
-                ArrayList<Object> msg_seq = new ArrayList<Object>();
-                msg_seq.add(msgToSend);
-                msg_seq.add(MSG_COUNTER);
-                msg_seq.add(myPort);
-                msg_seq.add(final_sequence_number);
+            //multicasting <M,Sequence>
+            ArrayList<Object> msg_seq = new ArrayList<Object>();
+            msg_seq.add(msgToSend);
+            msg_seq.add(MSG_COUNTER);
+            msg_seq.add(myPort);
+            msg_seq.add(final_sequence_number);
 
-                for (String port : REMOTE_PORTS) {
+            for (String port : REMOTE_PORTS) {
+
+                try {
                     Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port));
 
                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -333,23 +374,20 @@ public class GroupMessengerActivity extends Activity{
                     //Reference :: https://community.oracle.com/thread/1148113
                     Thread.sleep(500); //Since the socket seems to close before readUTF in server is completed, it throws EOFException. So, the sleep is added to keep the socket alive for some time.
                     out.close();
-                    Log.d("CLIENT",msg_seq.toString() + "\t 6"); //<msg, MSG_COUNTER, MyPort, Final_sequence number>
+                    Log.d("CLIENT", msg_seq.toString() + "\t 6"); //<msg, MSG_COUNTER, MyPort, Final_sequence number>
 
                     socket.close();
-                }
-
                 } catch (UnknownHostException e) {
-                Log.e("CLIENT", "ClientTask UnknownHostException");
-            } catch (IOException e) {
-                Log.e("CLIENT", "ClientTask socket IOException");
-                e.printStackTrace();
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+                    Log.e("CLIENT", "ClientTask UnknownHostException");
+                } catch (IOException e) {
+                    Log.e("CLIENT", "ClientTask socket IOException");
+                    e.printStackTrace();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
             }
-
             return null;
         }
-
     }
 
 
