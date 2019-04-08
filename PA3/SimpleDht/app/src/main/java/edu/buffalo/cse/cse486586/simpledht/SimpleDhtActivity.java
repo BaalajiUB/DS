@@ -1,7 +1,9 @@
 package edu.buffalo.cse.cse486586.simpledht;
 
+import android.content.Context;
 import android.os.Bundle;
 import android.app.Activity;
+import android.telephony.TelephonyManager;
 import android.text.method.ScrollingMovementMethod;
 import android.view.Menu;
 import android.widget.TextView;
@@ -12,7 +14,14 @@ public class SimpleDhtActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_simple_dht_main);
-        
+
+        TelephonyManager tel = (TelephonyManager) this.getSystemService(Context.TELEPHONY_SERVICE);
+        String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
+        final String myPort = String.valueOf((Integer.parseInt(portStr) * 2));
+
+        SimpleDhtProvider provider = new SimpleDhtProvider(); //initiates server and keeps it active.
+        provider.myPort = myPort; //Using 11108. Should it be 5554??
+
         TextView tv = (TextView) findViewById(R.id.textView1);
         tv.setMovementMethod(new ScrollingMovementMethod());
         findViewById(R.id.button3).setOnClickListener(
