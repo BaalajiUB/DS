@@ -100,16 +100,76 @@ public class SimpleDhtProvider extends ContentProvider {
     public Uri insert(Uri uri, ContentValues values) {
         String TAG = "Insert";
         // TODO Auto-generated method stub
-        SQLiteDatabase db = dbh.getWritableDatabase();
-        long newRowId = db.replace(DBHelper.TABLE_NAME, null, values); //insert won't replace
-        Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
-        Log.v(TAG, values.toString());
-        Log.v(TAG, resultUri.toString());
-        if (newRowId == -1) {
-            Log.v(TAG, "Insertion failed");
+        String KEY_I = values.getAsString(key);
+        String VALUE_I = values.getAsString(value);
+
+        String hash_key = "";
+        String pred_hash = "";
+        String my_hash = "";
+        try {
+            hash_key = genHash(KEY_I);
+            pred_hash = genHash(Predecessor);
+            my_hash = genHash(myPort);
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
         }
 
-        return resultUri;
+        String first_port = REMOTE_PORTS.split(",")[0];
+
+        if (!myPort.equals(first_port)){
+            if(hash_key.compareTo(pred_hash) > 0 && hash_key.compareTo(my_hash) <= 0){
+                SQLiteDatabase db = dbh.getWritableDatabase();
+                long newRowId = db.replace(DBHelper.TABLE_NAME, null, values); //insert won't replace
+                Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
+                Log.v(TAG, values.toString());
+                Log.v(TAG, resultUri.toString());
+                if (newRowId == -1) {
+                    Log.v(TAG, "Insertion failed");
+                }
+
+                return resultUri;
+            }
+            else{
+                //send the message to successor
+                Socket succ_socket = null;
+                try {
+                    succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                DataOutputStream succ_out = null;
+
+                try {
+                    succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                    succ_out.writeUTF(INSERT + "," + KEY_I + "," + VALUE_I);
+                    succ_out.flush();
+
+                    succ_out.close();
+                    succ_socket.close();
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        else{
+         if(hash_key.compareTo(pred_hash) > 0 || hash_key.compareTo(my_hash) > 0){
+             SQLiteDatabase db = dbh.getWritableDatabase();
+             long newRowId = db.replace(DBHelper.TABLE_NAME, null, values); //insert won't replace
+             Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
+             Log.v(TAG, values.toString());
+             Log.v(TAG, resultUri.toString());
+             if (newRowId == -1) {
+                 Log.v(TAG, "Insertion failed");
+             }
+
+             return resultUri;
+         }
+         else{
+             //send the message to successor
+         }
+        }
+        return null;
     }
 
     @Override
@@ -140,10 +200,44 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         else if(selection.equals("*")){
+
+            String[] temp = REMOTE_PORTS.split(",");
+
+            /*
+            Socket succ_socket = null;
+            try {
+                succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            DataOutputStream succ_out = null;
+            */
+
             cursor = db.rawQuery("select * from " + TABLE_NAME,null);
             //send this cursor to successor till reached the source
-        }
 
+/*
+            try {
+                succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                if(selectionArgs!=null){                    //propagator node
+
+                    succ_out.writeUTF(QUERY + "," + REMOTE_PORTS.length() + 1);
+                    succ_out.flush();
+
+                    String msg_pair_collection = "";
+                    while(cursor.moveToNext()){
+                        if(!msg_pair_collection.equals("")){
+                            msg_pair_collection+=",";
+                        }
+                        msg_pair_collection += cursor.getString(0) + "," + cursor.getString(1);
+                    }
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+*/
+        }
         else{
             try {
                 cursor = db.rawQuery("select * from " + TABLE_NAME + "where key <= \"" + genHash(Predecessor) + "\"",null);
@@ -170,6 +264,34 @@ public class SimpleDhtProvider extends ContentProvider {
 
             row_count = db.delete(TABLE_NAME, "1", null);
             //call delete of successor
+
+            String[] temp = REMOTE_PORTS.split(",");
+
+            Socket succ_socket = null;
+            try {
+                succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor));
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            DataOutputStream succ_out = null;
+            try {
+                succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                if (selectionArgs==null) {      //request from this avd
+                    succ_out.writeUTF(DELETE + "," + REMOTE_PORTS.length());
+                    succ_out.flush();
+                 }
+                else{                           //propagated request
+                    succ_out.writeUTF(DELETE + "," + String.valueOf(Integer.parseInt(selectionArgs[0])-1));
+                    succ_out.flush();
+                }
+
+                succ_out.close();
+                succ_socket.close();
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
         }
         else{
             try {
@@ -251,7 +373,7 @@ public class SimpleDhtProvider extends ContentProvider {
                             if (Successor!=null && !Successor.equals(first_port)) {
                                 Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor));
                                 DataOutputStream succ_out = null;
-                                succ_out = new DataOutputStream(socket.getOutputStream());
+                                succ_out = new DataOutputStream(succ_socket.getOutputStream());
                                 succ_out.writeUTF(NEW_NODE + "," + REMOTE_PORTS);
                                 succ_out.flush();
                                 succ_out.close();
@@ -289,7 +411,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                         //send cursor data to predecessor
                                         Socket pred_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Predecessor));
                                         DataOutputStream pred_out = null;
-                                        pred_out = new DataOutputStream(socket.getOutputStream());
+                                        pred_out = new DataOutputStream(pred_socket.getOutputStream());
 
                                         while(cursor.moveToNext()) {
                                             String KEY_I = cursor.getString(0);
@@ -310,7 +432,7 @@ public class SimpleDhtProvider extends ContentProvider {
 
                                 Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor));
                                 DataOutputStream succ_out = null;
-                                succ_out = new DataOutputStream(socket.getOutputStream());
+                                succ_out = new DataOutputStream(succ_socket.getOutputStream());
                                 succ_out.writeUTF(NEW_NODE + "," + REMOTE_PORTS);
                                 succ_out.flush();
                                 succ_out.close();
@@ -328,12 +450,71 @@ public class SimpleDhtProvider extends ContentProvider {
                             Uri t_uri = insert(mUri,cv);
 
                         }
+
+                        else if(TAG_input.equals(DELETE)){
+                            String[] val = new String[1];
+
+                            if(Integer.parseInt(payload)-1 >0){ //propagation ends on reaching last node
+                            val[0] = String.valueOf(Integer.parseInt(payload)-1);
+                            delete(mUri,"*", val);
+                            }
+                        }
+
+                        else if(TAG_input.equals(QUERY)){
+                                Cursor cursor_local =  query(mUri, null, "*",null,null);
+                                String msg_load = cursor_to_string(cursor_local);
+
+                            if(Integer.parseInt(payload) > 1) {
+
+                                Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor));
+                                DataOutputStream succ_out = null;
+                                DataInputStream succ_in = null;
+
+                                //request to successor
+                                succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                                succ_out.writeUTF(QUERY + "," + String.valueOf(Integer.parseInt(payload) - 1));
+                                succ_out.flush();
+
+                                String inp_msg = succ_in.readUTF();
+                                if (inp_msg != null) {
+                                    msg_load += inp_msg;
+
+                                    //return msg_load to predecessor
+                                }
+                                //succ_out.close();
+                                succ_socket.close();
+                            }
+                            DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
+                            pred_out.writeUTF(msg_load);
+                        }
+
+                        else if(TAG_input.equals(INSERT)){
+                            ContentValues cv = new ContentValues();
+                            String KEY_I = msgs[1].trim();
+                            String VALUE_I = msgs[2].trim();
+                            cv.put(key,KEY_I);
+                            cv.put(value,VALUE_I);
+                            Uri t_uri = insert(mUri,cv);
+
+                        }
+
                     }
                 } catch (IOException e) {
                     System.out.println(e);
                 }
             }
         }
+    }
+
+    private String cursor_to_string(Cursor cursor) {
+        String msg_pair_collection = "";
+        while(cursor.moveToNext()){
+            if(!msg_pair_collection.equals("")){
+                msg_pair_collection+=",";
+            }
+            msg_pair_collection += cursor.getString(0) + "," + cursor.getString(1);
+        }
+        return msg_pair_collection;
     }
 
     private String sort_ports(String remotePorts) {
