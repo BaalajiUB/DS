@@ -50,6 +50,7 @@ public class SimpleDhtProvider extends ContentProvider {
     static String QUERY = "QUERY";
     static String QUERY_SINGLE = "QUERY_SINGLE";
     static String DELETE = "DELETE";
+    static String DELETE_SINGLE = "DELETE_SINGLE";
     static String REHASHING = "REHASHING";
 
     static final String TAG = "SimpleDhtProvider";
@@ -370,13 +371,50 @@ public class SimpleDhtProvider extends ContentProvider {
             }
         }
 
+        else if(selectionArgs!=null){
+            String TAG = DELETE_SINGLE;
+            row_count = db.delete(TABLE_NAME, key + " = '" + selection + "'", null);
+            Log.d(TAG,"Delete count in AVD " + myPort + " > " + row_count);
+            Log.d("Delete", "Delete count > " + row_count);
+            return row_count;
+        }
+
         else{
+            String TAG = DELETE_SINGLE;
+            //row_count = db.delete(TABLE_NAME, key + " = '" + selection + "'", null);
+            //Log.d(TAG,"Delete count in AVD " + myPort + " > " + row_count);
+            //if (row_count == 0){
+            Socket succ_socket = null;
             try {
-                row_count = db.delete(TABLE_NAME, key + " = '" + genHash(selection) + "'", null);
-            } catch (NoSuchAlgorithmException e) {
+                    //Sending to self
+                    succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(myPort)*2);
+                    DataOutputStream succ_out = null;
+                    DataInputStream succ_in = null;
+                    Log.d(TAG, "Sending delete request to self > " + myPort);
+
+                    succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                    Thread.sleep(10);
+                    succ_out.writeUTF(DELETE_SINGLE + ":" + selection + "," + myPort);
+                    succ_out.flush();
+
+                    Log.d(TAG,"Message sent to successor > " + DELETE_SINGLE + ":" + selection + "," + myPort);
+
+                    succ_in = new DataInputStream(succ_socket.getInputStream());
+                    String inp_msg = succ_in.readUTF();
+                    if(inp_msg!=null){
+                        Log.d(TAG, "Message from successor > " + row_count);
+                        inp_msg = inp_msg.trim();
+                        row_count = Integer.parseInt(inp_msg);
+                    }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.e("Delete single","Exception");
+            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-        }
+            }
+
         Log.d("Delete", "Delete count > " + row_count);
         return row_count;
     }
@@ -617,11 +655,15 @@ public class SimpleDhtProvider extends ContentProvider {
                                     //if (msg_load.trim().equals("") && !inp_msg.trim().equals("")){msg_load+=",";}
                                     msg_load += "," + inp_msg;
                                     msg_load = msg_load.trim();
-                                    if(msg_load.charAt(0) == ','){
-                                        msg_load = msg_load.substring(1,msg_load.length());}
-                                    if(msg_load.charAt(msg_load.length()-1)==','){
-                                        msg_load = msg_load.substring(0,msg_load.length()-1);}
-
+                                    if(msg_load==","){msg_load = "";}
+                                    else {
+                                        if (msg_load.charAt(0) == ',') {
+                                            msg_load = msg_load.substring(1, msg_load.length());
+                                        }
+                                        if (msg_load.charAt(msg_load.length() - 1) == ',') {
+                                            msg_load = msg_load.substring(0, msg_load.length() - 1);
+                                        }
+                                    }
                                     //return msg_load to predecessor
                                 }
                                 //succ_out.close();
@@ -661,7 +703,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                 //request to successor
                                 succ_out = new DataOutputStream(succ_socket.getOutputStream());
                                 Thread.sleep(10);
-                                succ_out.writeUTF(QUERY_SINGLE + ":" + KEY_I + " ");
+                                succ_out.writeUTF(QUERY_SINGLE + ":" + KEY_I);
                                 succ_out.flush();
 
                                 succ_in = new DataInputStream(succ_socket.getInputStream());
@@ -682,9 +724,55 @@ public class SimpleDhtProvider extends ContentProvider {
                             pred_out.flush();
                         }
 
+                        else if(TAG_input.equals(DELETE_SINGLE)){
+                            String[] inp_lst = payload.split(",");
+                            String KEY_I = inp_lst[0].trim();
+                            String succ_not = inp_lst[1].trim();
+                            String[] selectionArgs = new String[1];
+                            selectionArgs[0] =  "DUMMY";
+                            int row_count = delete(mUri,KEY_I,selectionArgs);
+
+                            if(row_count == 0 && !Successor.equals(succ_not)){
+                                Socket succ_socket = null;
+                                try {
+                                    //Sending to self
+                                    succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
+                                    DataOutputStream succ_out = null;
+                                    DataInputStream succ_in = null;
+                                    Log.d(TAG, "Sending delete request to self > " + myPort);
+
+                                    succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                                    Thread.sleep(10);
+                                    succ_out.writeUTF(DELETE_SINGLE + ":" + payload);
+                                    succ_out.flush();
+
+                                    Log.d(TAG,"Message sent to successor > " + DELETE_SINGLE + ":" + payload);
+
+                                    succ_in = new DataInputStream(succ_socket.getInputStream());
+                                    String inp_msg = succ_in.readUTF();
+                                    if(inp_msg!=null){
+                                        Log.d(TAG, "Message from successor > " + row_count);
+                                        inp_msg = inp_msg.trim();
+                                        row_count = Integer.parseInt(inp_msg);
+                                    }
+
+                                } catch (IOException e) {
+                                    e.printStackTrace();
+                                    Log.e("Delete single","Exception");
+                                } catch (InterruptedException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+
+                            DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
+                            Thread.sleep(100);
+                            pred_out.writeUTF(Integer.toString(row_count));//  + " ");
+                            pred_out.flush();
+
+                        }
+
                         in.close();
                         socket.close();
-
                     }
                 } catch (IOException e) {
                     System.out.println(e);
