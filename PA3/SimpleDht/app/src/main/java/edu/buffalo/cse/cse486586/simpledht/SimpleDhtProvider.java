@@ -48,12 +48,15 @@ public class SimpleDhtProvider extends ContentProvider {
     static String NEW_NODE = "NEW_NODE";
     static String INSERT = "INSERT";
     static String QUERY = "QUERY";
+    static String QUERY_SINGLE = "QUERY_SINGLE";
     static String DELETE = "DELETE";
     static String REHASHING = "REHASHING";
 
     static final String TAG = "SimpleDhtProvider";
 
     public String myPort;
+
+    static final String COORD_PORT = "11108";
 
     private Uri buildUri(String scheme, String authority) {
         Uri.Builder uriBuilder = new Uri.Builder();
@@ -95,19 +98,25 @@ public class SimpleDhtProvider extends ContentProvider {
             String msgToSend = myPort;
             Log.i(TAG, "Message to send : " + msgToSend);
 
+            Socket socket;
             if (null != msgToSend || !msgToSend.isEmpty()) {
                 //Client logic
-                String COORD_PORT = "11108";
+
                 try {
-                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(COORD_PORT));
+                    socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(COORD_PORT));
                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
-                    out.writeUTF(NEW_NODE_ENTRY + ":" + msgToSend);
+
+                    Thread.sleep(10);
+                    out.writeUTF(NEW_NODE_ENTRY + ":" + msgToSend + " ");
                     out.flush();
 
                     Log.d(TAG, TAG + ", Message written : " + msgToSend);
                     out.close();
                     socket.close();
                 } catch (IOException e) {
+                    e.printStackTrace();
+                    Log.e(TAG,"Exception");
+                } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
             }
@@ -122,6 +131,8 @@ public class SimpleDhtProvider extends ContentProvider {
         String KEY_I = values.getAsString(key);
         String VALUE_I = values.getAsString(value);
 
+        //Log.d(TAG, myPort + " : " + KEY_I + " , " + VALUE_I);
+
         String hash_key = "";
         String pred_hash = "";
         String my_hash = "";
@@ -134,19 +145,23 @@ public class SimpleDhtProvider extends ContentProvider {
         }
 
         String first_port = REMOTE_PORTS.split(",")[0].trim();
+        Log.d(TAG,"FIRST PORT : " + first_port);
         boolean local = false;
 
-        if(REMOTE_PORTS.split(",").length == 1){
+        if(REMOTE_PORTS.split(",").length <= 1){
+            Log.d(TAG, "Insert condition : Single insert");
             local = true;
         }
 
         else {
             if (!myPort.equals(first_port)) {
                 if (hash_key.compareTo(pred_hash) > 0 && hash_key.compareTo(my_hash) <= 0) {
+                    Log.d(TAG, "Insert condition : !PORT1 insert");
                     local = true;
                 }
             } else {
-                if (hash_key.compareTo(pred_hash) > 0 || hash_key.compareTo(my_hash) == 0) {
+                if (hash_key.compareTo(pred_hash) > 0 || hash_key.compareTo(my_hash) <= 0) {  //changed from == to <= on condition 2
+                    Log.d(TAG, "Insert condition : PORT1 insert");
                     local = true;
                 }
             }
@@ -156,7 +171,9 @@ public class SimpleDhtProvider extends ContentProvider {
             SQLiteDatabase db = dbh.getWritableDatabase();
             long newRowId = db.replace(DBHelper.TABLE_NAME, null, values); //insert won't replace
             Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
-            Log.d(TAG, values.toString());
+            //Log.d(TAG, values.toString());
+            Log.d(TAG+"ed", myPort + " : " + KEY_I + " , " + VALUE_I);
+
             //Log.d(TAG, resultUri.toString());
             if (newRowId == -1) {
                 Log.v(TAG, "Insertion failed");
@@ -167,21 +184,27 @@ public class SimpleDhtProvider extends ContentProvider {
         }
         else{
         //send the message to successor
+        Log.d(TAG, "Insert condition : successor insert > Successor = " + Successor + " > " + KEY_I);
+
         Socket succ_socket = null;
         try {
             succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
             DataOutputStream succ_out = null;
             succ_out = new DataOutputStream(succ_socket.getOutputStream());
+            Thread.sleep(10);
             succ_out.writeUTF(INSERT + ":" + KEY_I + "," + VALUE_I);
             succ_out.flush();
-
+            Log.d(TAG, KEY_I + "," + VALUE_I + " sent to > " + Successor);
             succ_out.close();
             succ_socket.close();
 
         } catch (IOException e) {
             e.printStackTrace();
+            Log.e(TAG,"Exception");
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
-    }
+        }
 
     return null;
     }
@@ -217,10 +240,62 @@ public class SimpleDhtProvider extends ContentProvider {
 
                 //request to self server
                 succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                succ_out.writeUTF(QUERY + ":" + String.valueOf(REMOTE_PORTS.length()));
-                Log.d(TAG,"Request sent > " + QUERY + ":" + String.valueOf(REMOTE_PORTS.length()));
+                Thread.sleep(10);
+                succ_out.writeUTF(QUERY + ":" + String.valueOf(REMOTE_PORTS.split(",").length) + " ");
                 succ_out.flush();
+                Log.d(TAG,"Request sent > " + QUERY + ":" + String.valueOf(REMOTE_PORTS.split(",").length) + "to self " + myPort);
 
+                succ_in = new DataInputStream(succ_socket.getInputStream());
+                String inp_msg = succ_in.readUTF();
+                if (inp_msg != null) {
+                    //string to cursor
+                    Log.d(TAG,"Message recieved from self > " + inp_msg);
+                    Log.d(TAG,"Length of recieced message : " + inp_msg.split(",").length);
+                    cursor = getCursorFromList(inp_msg);
+                    Log.d(TAG,"Cursor size > " + cursor.getCount());
+                }
+                succ_socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Log.e("Query * call","Exception");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
+
+        else if(selection.equals("<=")){
+            try {
+                cursor = db.rawQuery("select * from " + TABLE_NAME + " where key <= \'" + genHash(Predecessor) + "\'",null);
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            }
+        }
+        else if(sortOrder != null){
+            cursor = db.query(
+                    DBHelper.TABLE_NAME,   // The table to query
+                    null,             // The array of columns to return (pass null to get all)
+                    "key='" + selection + "'",              // The columns for the WHERE clause
+                    selectionArgs,          // The values for the WHERE clause
+                    null,                   // don't group the rows
+                    null,                   // don't filter by row groups
+                    null               // The sort order
+            );
+        }
+        else{
+            Socket succ_socket = null;
+            try {
+                succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(myPort)*2);
+                DataOutputStream succ_out = null;
+                DataInputStream succ_in = null;
+
+                //request to self server
+                succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                Thread.sleep(10);
+                succ_out.writeUTF(QUERY_SINGLE + ":" + selection + " ");
+                succ_out.flush();
+                Log.d(TAG,"Request sent > " + QUERY_SINGLE + ":" + selection);
+
+                succ_in = new DataInputStream(succ_socket.getInputStream());
                 String inp_msg = succ_in.readUTF();
                 if (inp_msg != null) {
                     //string to cursor
@@ -231,27 +306,13 @@ public class SimpleDhtProvider extends ContentProvider {
                 succ_socket.close();
             } catch (IOException e) {
                 e.printStackTrace();
-            }
-        }
-
-        else if(selection.equals("<=")){
-            try {
-                cursor = db.rawQuery("select * from " + TABLE_NAME + "where key <= \"" + genHash(Predecessor) + "\"",null);
-            } catch (NoSuchAlgorithmException e) {
+                Log.e("Query * call","Exception");
+            } catch (InterruptedException e) {
                 e.printStackTrace();
             }
+
         }
-        else{
-            cursor = db.query(
-                    DBHelper.TABLE_NAME,   // The table to query
-                    projection,             // The array of columns to return (pass null to get all)
-                    "key='" + selection + "'",              // The columns for the WHERE clause
-                    selectionArgs,          // The values for the WHERE clause
-                    null,                   // don't group the rows
-                    null,                   // don't filter by row groups
-                    null               // The sort order
-            );
-        }
+
         return cursor;
     }
 
@@ -282,7 +343,8 @@ public class SimpleDhtProvider extends ContentProvider {
                 DataInputStream succ_in = null;
 
                 succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                succ_out.writeUTF(DELETE + ":" + REMOTE_PORTS.length());
+                Thread.sleep(10);
+                succ_out.writeUTF(DELETE + ":" + REMOTE_PORTS.length() + " ");
                 succ_out.flush();
 
                 String inp_msg = succ_in.readUTF();
@@ -292,6 +354,9 @@ public class SimpleDhtProvider extends ContentProvider {
 
             } catch (IOException e) {
                 e.printStackTrace();
+                Log.e("Delete * call","Exception");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
         else{
@@ -299,7 +364,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 //db.execSQL("delete from " + TABLE_NAME + " where key <= \"" + genHash(Predecessor) + "\"");
 
                 //https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android
-                row_count = db.delete(TABLE_NAME, key + "<=" + genHash(Predecessor), null);
+                row_count = db.delete(TABLE_NAME, key + " <= '" + genHash(Predecessor) + "'", null);
             } catch (NoSuchAlgorithmException e) {
                 e.printStackTrace();
             }
@@ -328,6 +393,7 @@ public class SimpleDhtProvider extends ContentProvider {
         protected Void doInBackground(ServerSocket... sockets) {
             Log.d("SERVER_"+myPort, "Serversocket created");
             ServerSocket serverSocket = sockets[0];
+
             while (true) {
                 try {
                     Socket socket = serverSocket.accept();
@@ -337,9 +403,9 @@ public class SimpleDhtProvider extends ContentProvider {
 
                     if (null != msgRecieved) {
                         Log.d("SERVER_"+myPort,"Socket Accepted");
-                        Log.d("SERVER_"+myPort,msgRecieved);
+                        //Log.d("SERVER_"+myPort,msgRecieved);
                         String[] msgs = msgRecieved.split(":");
-
+                        Log.d("SERVER_REC" , msgRecieved);
                         String TAG_input = msgs[0].trim();
                         String payload = msgs[1].trim();
 
@@ -382,28 +448,30 @@ public class SimpleDhtProvider extends ContentProvider {
                                 Predecessor = ports_arr[pred_ind];
                                 Successor = ports_arr[succ_ind];
                             }
-                            Log.d(TAG, "Predecessor, Successor : " + Predecessor+","+Successor);
+                            Log.d(TAG, "Predecessor, Successor : " + Predecessor+","+Successor +" myport: "+myPort);
 
                             String first_port = "5554";
 
                             //send the new node to successor
-                            if (!Successor.equals("") && !Successor.equals(first_port)) {
+                            if (!Successor.equals("")){ // && !Successor.equals(first_port)) {
                                 Log.d(TAG,"Sending to Successor");
                                 Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
                                 DataOutputStream succ_out = null;
                                 succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                succ_out.writeUTF(NEW_NODE + ":" + REMOTE_PORTS);
-                                Log.d(TAG,NEW_NODE + "," + REMOTE_PORTS);
+                                Thread.sleep(10);
+                                succ_out.writeUTF(NEW_NODE + ":" + REMOTE_PORTS+ " ");
                                 succ_out.flush();
+                                Log.d(TAG,NEW_NODE + ":" + REMOTE_PORTS);
                                 succ_out.close();
                                 succ_socket.close();
                             }
                         }
 
                         else if (TAG_input.equals(NEW_NODE)) {
-
                             //update remote ports
+                            String TAG = NEW_NODE;
                             REMOTE_PORTS = payload;
+                            Log.d(TAG, "Updated REMOTE_PORTS > " + REMOTE_PORTS);
 
                             String[] ports_ar = REMOTE_PORTS.split(",");
                             String[] ports_arr = new String[ports_ar.length];
@@ -417,12 +485,14 @@ public class SimpleDhtProvider extends ContentProvider {
                                 int my_ind = Arrays.asList(ports_arr).indexOf(myPort);
                                 int len = ports_arr.length;
                                 int pred_ind = (my_ind-1)%len;
+                                pred_ind = pred_ind>=0? pred_ind : len + pred_ind;
                                 int succ_ind = (my_ind+1)%len;
                                 String old_Predecessor = Predecessor;
                                 //String old_Successor = Successor;
                                 Predecessor = ports_arr[pred_ind];
                                 Successor = ports_arr[succ_ind];
 
+                                Log.d(TAG, "Updated Predecessor, Successor > " + Predecessor + "," + Successor+" myport: "+myPort);
 
                                 //repartition chord data
                                 if (!Predecessor.equals(old_Predecessor)){
@@ -437,7 +507,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                     while(cursor.moveToNext()) {
                                         String KEY_I = cursor.getString(0);
                                         String VALUE_I = cursor.getString(1);
-
+                                        Thread.sleep(10);
                                         pred_out.writeUTF(REHASHING + ":" + KEY_I + "," + VALUE_I);
                                         pred_out.flush();
 
@@ -448,6 +518,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                     //remove all keys <= new node key
                                     delete(mUri,"<=",null);
 
+                                    Log.d(TAG, "Repartitioning complete");
                                 }
                             }
 
@@ -459,7 +530,8 @@ public class SimpleDhtProvider extends ContentProvider {
                                 Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
                                 DataOutputStream succ_out = null;
                                 succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                succ_out.writeUTF(NEW_NODE + ":" + REMOTE_PORTS);
+                                Thread.sleep(10);
+                                succ_out.writeUTF(NEW_NODE + ":" + REMOTE_PORTS +" ");
                                 succ_out.flush();
                                 succ_out.close();
                                 succ_socket.close();
@@ -489,7 +561,8 @@ public class SimpleDhtProvider extends ContentProvider {
 
                                 //request to successor
                                 succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                succ_out.writeUTF(DELETE + ":" + String.valueOf(Integer.parseInt(payload) - 1));
+                                Thread.sleep(10);
+                                succ_out.writeUTF(DELETE + ":" + String.valueOf(Integer.parseInt(payload) - 1) + " ");
 
                                 //succ_out.writeUTF(QUERY + ":" + String.valueOf(Integer.parseInt(payload) - 1));
                                 succ_out.flush();
@@ -504,7 +577,8 @@ public class SimpleDhtProvider extends ContentProvider {
                                 succ_socket.close();
                             }
                             DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
-                            pred_out.writeUTF(Integer.toString(count));
+                            Thread.sleep(10);
+                            pred_out.writeUTF(Integer.toString(count) + " ");
                             pred_out.flush();
 
                         }
@@ -512,7 +586,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         else if(TAG_input.equals(QUERY)){
                                 Cursor cursor_local =  query(mUri, null, "@",null,null);
                                 String msg_load = cursor_to_string(cursor_local);
-
+                                Log.d(TAG,"Mesasge from local AVD : " + msg_load);
                             if(Integer.parseInt(payload) > 1) {
 
                                 Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
@@ -520,13 +594,24 @@ public class SimpleDhtProvider extends ContentProvider {
                                 DataInputStream succ_in = null;
 
                                 //request to successor
+                                succ_in = new DataInputStream(succ_socket.getInputStream());
                                 succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                succ_out.writeUTF(QUERY + ":" + String.valueOf(Integer.parseInt(payload) - 1));
+                                Thread.sleep(10);
+                                succ_out.writeUTF(QUERY + ":" + String.valueOf(Integer.parseInt(payload) - 1) + " ");
                                 succ_out.flush();
+
+                                Log.d(TAG,"Requesting from successor : " + Successor);
 
                                 String inp_msg = succ_in.readUTF();
                                 if (inp_msg != null) {
-                                    msg_load += inp_msg;
+                                    Log.d(TAG,"Mesasge from successor AVD : " + inp_msg);
+                                    //if (msg_load.trim().equals("") && !inp_msg.trim().equals("")){msg_load+=",";}
+                                    msg_load += "," + inp_msg;
+                                    int len = msg_load.length();
+                                    if(msg_load.charAt(0) == ','){
+                                        msg_load = msg_load.substring(1,len);}
+                                    if(msg_load.charAt(msg_load.length()-1)==','){
+                                        msg_load = msg_load.substring(0,len-1);}
 
                                     //return msg_load to predecessor
                                 }
@@ -536,18 +621,56 @@ public class SimpleDhtProvider extends ContentProvider {
 
                             Log.d(TAG, "Message to send > " + msg_load);
                             DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
-                            pred_out.writeUTF(msg_load);
+                            Thread.sleep(10);
+                            pred_out.writeUTF(msg_load + " ");
                             pred_out.flush();
                         }
 
                         else if(TAG_input.equals(INSERT)){
                             ContentValues cv = new ContentValues();
-                            String KEY_I = msgs[1].trim();
-                            String VALUE_I = msgs[2].trim();
+                            String[] key_val = payload.split(",");
+                            String KEY_I = key_val[0].trim();
+                            String VALUE_I = key_val[1].trim();
                             cv.put(key,KEY_I);
                             cv.put(value,VALUE_I);
                             Uri t_uri = insert(mUri,cv);
+                        }
 
+                        else if(TAG_input.equals(QUERY_SINGLE)){
+                            String TAG = QUERY_SINGLE;
+                            String return_msg;
+                            String KEY_I = payload.trim();
+                            Cursor cursor = query(mUri,null,KEY_I,null,"KEY");
+                            return_msg = cursor_to_string(cursor);
+
+                            if(cursor.getCount() == 0){
+                                Log.d(TAG,"Requesting successor > " + Successor);
+                                Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
+                                DataOutputStream succ_out = null;
+                                DataInputStream succ_in = null;
+
+                                //request to successor
+                                succ_out = new DataOutputStream(succ_socket.getOutputStream());
+                                Thread.sleep(10);
+                                succ_out.writeUTF(QUERY_SINGLE + ":" + KEY_I + " ");
+                                succ_out.flush();
+
+                                succ_in = new DataInputStream(succ_socket.getInputStream());
+                                String inp_msg = succ_in.readUTF();
+                                Log.d(TAG,"Reply from successor > " + inp_msg);
+                                if (inp_msg != null) {
+                                    Log.d(TAG,"Message from Successor : " + inp_msg);
+                                    return_msg = inp_msg;
+                                    //return msg_load to predecessor
+                                }
+                                //succ_out.close();
+                                succ_socket.close();
+                            }
+                            Log.d(TAG, "Message to send > " + return_msg + " to > "  + Predecessor);
+                            DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
+                            Thread.sleep(100);
+                            pred_out.writeUTF(return_msg  + " ");
+                            pred_out.flush();
                         }
 
                         in.close();
@@ -556,6 +679,9 @@ public class SimpleDhtProvider extends ContentProvider {
                     }
                 } catch (IOException e) {
                     System.out.println(e);
+                    Log.e("Server Socket","Exception");
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
                 }
             }
         }
@@ -578,8 +704,7 @@ public class SimpleDhtProvider extends ContentProvider {
         );
 
         String[] vals = input.split(",");
-
-        for (int i=1; i< vals.length; i+=2){
+        for (int i=0; i< vals.length; i+=2){
             cursor.newRow()
                     .add(key, vals[i].trim())
                     .add(value, vals[i+1].trim());
