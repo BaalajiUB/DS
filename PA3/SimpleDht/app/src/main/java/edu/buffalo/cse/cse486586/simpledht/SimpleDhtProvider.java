@@ -633,6 +633,7 @@ public class SimpleDhtProvider extends ContentProvider {
                         else if(TAG_input.equals(QUERY)){
                                 Cursor cursor_local =  query(mUri, null, "@",null,null);
                                 String msg_load = cursor_to_string(cursor_local);
+                                msg_load = msg_load.trim();
                                 Log.d(TAG,"Mesasge from local AVD : " + msg_load);
                             if(Integer.parseInt(payload) > 1) {
 
@@ -651,11 +652,12 @@ public class SimpleDhtProvider extends ContentProvider {
 
                                 String inp_msg = succ_in.readUTF();
                                 if (inp_msg != null) {
+                                    inp_msg = inp_msg.trim();
                                     Log.d(TAG,"Mesasge from successor AVD : " + inp_msg);
                                     //if (msg_load.trim().equals("") && !inp_msg.trim().equals("")){msg_load+=",";}
                                     msg_load += "," + inp_msg;
                                     msg_load = msg_load.trim();
-                                    if(msg_load==","){msg_load = "";}
+                                    if(msg_load.equals(",")){msg_load = "";}
                                     else {
                                         if (msg_load.charAt(0) == ',') {
                                             msg_load = msg_load.substring(1, msg_load.length());
@@ -669,7 +671,7 @@ public class SimpleDhtProvider extends ContentProvider {
                                 //succ_out.close();
                                 succ_socket.close();
                             }
-
+                            msg_load = msg_load.trim();
                             Log.d(TAG, "Message to send > " + msg_load);
                             DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
                             Thread.sleep(10);
