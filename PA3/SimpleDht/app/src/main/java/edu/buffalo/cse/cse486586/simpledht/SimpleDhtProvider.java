@@ -359,7 +359,7 @@ public class SimpleDhtProvider extends ContentProvider {
                 e.printStackTrace();
             }
         }
-        else{
+        else if(selection.equals("<=")){
             try {
                 //db.execSQL("delete from " + TABLE_NAME + " where key <= \"" + genHash(Predecessor) + "\"");
 
@@ -369,6 +369,15 @@ public class SimpleDhtProvider extends ContentProvider {
                 e.printStackTrace();
             }
         }
+
+        else{
+            try {
+                row_count = db.delete(TABLE_NAME, key + " = '" + genHash(selection) + "'", null);
+            } catch (NoSuchAlgorithmException e) {
+                e.printStackTrace();
+            }
+        }
+        Log.d("Delete", "Delete count > " + row_count);
         return row_count;
     }
 
@@ -607,11 +616,11 @@ public class SimpleDhtProvider extends ContentProvider {
                                     Log.d(TAG,"Mesasge from successor AVD : " + inp_msg);
                                     //if (msg_load.trim().equals("") && !inp_msg.trim().equals("")){msg_load+=",";}
                                     msg_load += "," + inp_msg;
-                                    int len = msg_load.length();
+                                    msg_load = msg_load.trim();
                                     if(msg_load.charAt(0) == ','){
-                                        msg_load = msg_load.substring(1,len);}
+                                        msg_load = msg_load.substring(1,msg_load.length());}
                                     if(msg_load.charAt(msg_load.length()-1)==','){
-                                        msg_load = msg_load.substring(0,len-1);}
+                                        msg_load = msg_load.substring(0,msg_load.length()-1);}
 
                                     //return msg_load to predecessor
                                 }
