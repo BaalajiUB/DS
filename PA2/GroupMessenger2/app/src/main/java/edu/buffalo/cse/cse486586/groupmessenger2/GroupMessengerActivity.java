@@ -144,7 +144,7 @@ public class GroupMessengerActivity extends Activity{
 
                         if (msgRecieved.size() == 3) {   //<msg, MSG_COUNTER, MyPort>
 
-                            Log.d("SERVER", msgRecieved.toString() + "\t 2"); //<msg, MSG_COUNTER, MyPort>
+                            Log.d("SERVER", msgRecieved.toString() + "\t (2)"); //<msg, MSG_COUNTER, MyPort>
 
 /*
                             Integer port = (Integer) msgRecieved.get(2);
@@ -162,7 +162,7 @@ public class GroupMessengerActivity extends Activity{
                             in.close();
                             socket.close();
 
-                            Log.d("SERVER", msgRecieved.toString() + "\t 3"); //<MSG, MSG_ID, P_ID, SEQUENCE>
+                            Log.d("SERVER", msgRecieved.toString() + "\t (3)"); //<MSG, MSG_ID, P_ID, SEQUENCE>
 
                             //adding the output message to priority queue
                             msgRecieved.add(false);
@@ -172,7 +172,7 @@ public class GroupMessengerActivity extends Activity{
 
                             //updating the priority queue
 
-                            Log.d("SERVER", msgRecieved.toString() + "\t 7"); //<msg, MSG_COUNTER, MyPort, Final_sequence number>
+                            Log.d("SERVER", msgRecieved.toString() + "\t (7)"); //<msg, MSG_COUNTER, MyPort, Final_sequence number>
 
                             String INPUT_MSG = (String) msgRecieved.get(0);
                             Integer INPUT_MSG_ID = (Integer) msgRecieved.get(1);
@@ -193,11 +193,11 @@ public class GroupMessengerActivity extends Activity{
                                 ArrayList<Object> arr = itr.next();
                                 if(lst.contains(arr.get(2).toString().trim())) { //removes dead node data
 //                                if(lst.contains(arr.get(2).toString().trim()) || ((!lst.contains(arr.get(2).toString().trim())) && arr.get(4).toString().trim().equals("false"))) { //removes dead node data
-                                    Log.d("SERVER", arr.toString() + "\t  8.0");
+                                    Log.d("SERVER", arr.toString() + "\t  (8.0)");
                                     if (arr.get(0).toString().trim().equals(INPUT_MSG) && arr.get(1).toString().trim().equals(INPUT_MSG_ID.toString()) && arr.get(2).toString().trim().equals(INPUT_PORT)) {
                                         arr.set(3, MSG_SEQ);
                                         arr.set(4, true);
-                                        Log.d("SERVER", arr.toString() + "\t 8");
+                                        Log.d("SERVER", arr.toString() + "\t (8)");
                                         //f = 1;
                                     }
                                     TEMP_BUFFER_QUEUE.add(arr);
@@ -218,7 +218,7 @@ public class GroupMessengerActivity extends Activity{
 
                             while (STATUS == true) {
                                 ArrayList<Object> delivered = BUFFER_QUEUE.poll();
-                                Log.d("SERVER", delivered.toString() + "\t 9");
+                                Log.d("SERVER", delivered.toString() + "\t (9)");
 
                                 publishProgress(delivered.get(0).toString().trim()); //message to display in UI
                                 Log.i("DELIVERY", delivered.toString());
@@ -241,7 +241,7 @@ public class GroupMessengerActivity extends Activity{
                 } catch (EOFException e) {
                     e.printStackTrace();
                     Log.e("SERVER", "ServerTask IOException");
-                    //continue;
+                    continue;
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
@@ -264,6 +264,8 @@ public class GroupMessengerActivity extends Activity{
 
             Log.d("URI",t_uri.toString());
             Log.d("insert",cv.toString());
+
+            Log.d("PQ", BUFFER_QUEUE.toString());
 
             WRITE_COUNTER++;
 
@@ -302,7 +304,7 @@ public class GroupMessengerActivity extends Activity{
                         out.writeUTF(msg.toString()); //<msg, MSG_COUNTER, MyPort>
                         out.flush();
                         //out.close(); //only the last occurance of close() is executed to keep the socket alive
-                        Log.d("CLIENT", msg.toString() + "\t 1"); //<msg, MSG_COUNTER, MyPort>
+                        Log.d("CLIENT", msg.toString() + "\t (1)"); //<msg, MSG_COUNTER, MyPort>
 
                         DataInputStream in = new DataInputStream(socket.getInputStream());
 
@@ -313,7 +315,7 @@ public class GroupMessengerActivity extends Activity{
 
 
                         if (null != inp) {
-                            Log.d("CLIENT", inp + "\t 4"); //<MSG, MSG_ID, P_ID, SEQUENCE>
+                            Log.d("CLIENT", inp + "\t (4)"); //<MSG, MSG_ID, P_ID, SEQUENCE>
 
                             ArrayList<Object> input_list = str_to_arrlist(inp);
                             Integer sequence_proposal = (Integer) input_list.get(3);
@@ -321,23 +323,11 @@ public class GroupMessengerActivity extends Activity{
 
                             //if (sequence_list.size() == REMOTE_PORTS.length) {
                             final_sequence_number = Collections.max(sequence_list);
-                            Log.d("CLIENT", "All replies recieved" + "\t 5");
+                            Log.d("CLIENT", "All replies recieved" + "\t (5)");
                             //}
                         }
                     } catch (UnknownHostException e) {
                         Log.e("CLIENT", "ClientTask UnknownHostException");
-                    } catch (SocketException e) {
-/*
-                        e.printStackTrace();
-                        Log.e("CRASH",port + " crashed");
-                        ArrayList<String> al = new ArrayList<String>(REMOTE_PORTS.length);
-                        for (String j : REMOTE_PORTS){al.add(j);}
-                        al.remove(port);
-                        REMOTE_PORTS = al.toArray(new String[al.size()]);
-
-                        continue;
-*/
-
                     } catch (IOException e) {
                         Log.e("CLIENT", "ClientTask socket IOException");
                         e.printStackTrace();
@@ -367,6 +357,8 @@ public class GroupMessengerActivity extends Activity{
                 try {
                     Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port));
 
+                    socket.setSoTimeout(500);
+
                     DataOutputStream out = new DataOutputStream(socket.getOutputStream());
                     out.writeUTF(msg_seq.toString()); //<msg, MSG_COUNTER, MyPort, Final_sequence number>
                     out.flush();
@@ -382,6 +374,15 @@ public class GroupMessengerActivity extends Activity{
                 } catch (IOException e) {
                     Log.e("CLIENT", "ClientTask socket IOException");
                     e.printStackTrace();
+
+                    Log.e("CRASH",port + " crashed");
+                    ArrayList<String> al = new ArrayList<String>(REMOTE_PORTS.length);
+                    for (String j : REMOTE_PORTS){al.add(j);}
+                    al.remove(port);
+                    REMOTE_PORTS = al.toArray(new String[al.size()]);
+
+                    continue;
+
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }

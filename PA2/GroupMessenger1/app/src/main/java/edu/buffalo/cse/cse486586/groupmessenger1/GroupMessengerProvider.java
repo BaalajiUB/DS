@@ -67,7 +67,7 @@ public class GroupMessengerProvider extends ContentProvider {
          * take a look at the code for PA1.
          */
         SQLiteDatabase db = dbh.getWritableDatabase();
-        long newRowId = db.replace(DBHelper.TABLE_NAME, null, values);
+        long newRowId = db.replace(DBHelper.TABLE_NAME, null, values); //insert won't replace
         Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
         Log.v("insert", values.toString());
         Log.v("insert",resultUri.toString());
