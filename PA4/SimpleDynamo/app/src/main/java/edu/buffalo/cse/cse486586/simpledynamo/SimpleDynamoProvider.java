@@ -29,7 +29,7 @@ import android.util.Log;
 public class SimpleDynamoProvider extends ContentProvider {
 
 	private DBHelper dbh;
-	private final Uri mUri = buildUri("content", "edu.buffalo.cse.cse486586.simpledht.provider");
+	private final Uri mUri = buildUri("content", "edu.buffalo.cse.cse486586.simpledynamo.provider");
 	public static final String TABLE_NAME = "Messages";
 	private static final String key = "key";
 	private static final String value = "value";
@@ -43,14 +43,12 @@ public class SimpleDynamoProvider extends ContentProvider {
 	static String NEW_NODE_ENTRY = "NEW_NODE_ENTRY";
 	static String NEW_NODE = "NEW_NODE";
 	static String INSERT = "INSERT";
-	static String REPLICA = "REPLICA";
 	static String QUERY = "QUERY";
 	static String QUERY_SINGLE = "QUERY_SINGLE";
 	static String DELETE = "DELETE";
 	static String DELETE_SINGLE = "DELETE_SINGLE";
-	static String REHASHING = "REHASHING";
 
-	static final String TAG = "SimpleDhtProvider";
+	static final String TAG = "SimpleDynamo";
 
 	public String myPort;
 
@@ -130,116 +128,54 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 	@Override
 	public Uri insert(Uri uri, ContentValues values) {
-		// TODO Auto-generated method stub
-		String TAG = "Insert";
-		// TODO Auto-generated method stub
+		insert_helper(uri,values);
+		return null;
+	}
+
+	public void insert_helper(Uri uri, ContentValues values){
+		String TAG = INSERT;
+		//find bucket in which the data is to be inserted
+		ArrayList<String> hashed_ports = new ArrayList<String>(5);
+		int coordinator = -1;
 		String KEY_I = values.getAsString(key);
 		String VALUE_I = values.getAsString(value);
 
-		//Log.d(TAG, myPort + " : " + KEY_I + " , " + VALUE_I);
-
 		String hash_key = "";
-		String pred_hash = "";
-		String my_hash = "";
 		try {
 			hash_key = genHash(KEY_I);
-			pred_hash = genHash(Predecessor);
-			my_hash = genHash(myPort);
+			for(String i : REMOTE_PORTS.split(",")){
+				hashed_ports.add(genHash(i.trim()));
+			}
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		}
 
-		String first_port = REMOTE_PORTS.split(",")[0].trim();
-		Log.d(TAG,"FIRST PORT : " + first_port);
-		boolean local = false;
+		if(hash_key.compareTo(hashed_ports.get(0))<= 0){ coordinator = 0;}
+		else if(hash_key.compareTo(hashed_ports.get(1))<= 0){ coordinator = 1;}
+		else if(hash_key.compareTo(hashed_ports.get(2))<= 0){ coordinator = 2;}
+		else if(hash_key.compareTo(hashed_ports.get(3))<= 0){ coordinator = 3;}
+		else if(hash_key.compareTo(hashed_ports.get(4))<= 0){ coordinator = 4;}
+		else{coordinator = 0;}
 
-		if(REMOTE_PORTS.split(",").length <= 1){
-			Log.d(TAG, "Insert condition : Single insert");
-			local = true;
-		}
+		//get list of ports to which the data is to be inserted
+		String[] Remote_Port_List = REMOTE_PORTS.split(",");
+		ArrayList<String> lst = new ArrayList<String>();
+		for(int i=0; i<3; i++){
+			int ind = (coordinator + i)%5;
+			String port = Remote_Port_List[ind].trim();
 
-		else {
-			if (!myPort.equals(first_port)) {
-				if (hash_key.compareTo(pred_hash) > 0 && hash_key.compareTo(my_hash) <= 0) {
-					Log.d(TAG, "Insert condition : !PORT1 insert");
-					local = true;
-				}
-			} else {
-				if (hash_key.compareTo(pred_hash) > 0 || hash_key.compareTo(my_hash) <= 0) {  //changed from == to <= on condition 2
-					Log.d(TAG, "Insert condition : PORT1 insert");
-					local = true;
-				}
-			}
-		}
-
-		if (local){ //if range in local, insert
-			SQLiteDatabase db = dbh.getWritableDatabase();
-			long newRowId = db.replace(DBHelper.TABLE_NAME, null, values); //insert won't replace
-			Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
-			//Log.d(TAG, values.toString());
-			Log.d(TAG+"ed", myPort + " : " + KEY_I + " , " + VALUE_I);
-
-			//Log.d(TAG, resultUri.toString());
-			if (newRowId == -1) {
-				Log.v(TAG, "Insertion failed");
-			}
-
-			//REPLICA logic
-			Log.d(REPLICA,"Replication initiated");
-			Log.d(REPLICA, "Remote ports list : " + REMOTE_PORTS);
-			String[] successors = new String[2];
-
-			//Finding next 2 successors
-			String[] ports = REMOTE_PORTS.split(",");
-			for(int i=0; i<ports.length; i++){
-				if(ports[i].trim().equals(myPort)){
-					int s1 = (i+1)%ports.length;
-					int s2 = (i+2)%ports.length;
-					successors[0] = ports[s1].trim();
-					successors[1] = ports[s2].trim();
-					break;
-				}
-			}
-			Log.d(REPLICA,"Successors are : " + successors[0] + "," + successors[1]);
-
-			for(String succ : successors){
-				Socket succ_socket = null;
-				try {
-					Log.d(REPLICA,"Sending to successor " + succ);
-					succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(succ) * 2);
-					DataOutputStream succ_out = null;
-					succ_out = new DataOutputStream(succ_socket.getOutputStream());
-					Thread.sleep(10);
-					succ_out.writeUTF(REPLICA + ":" + KEY_I + "," + VALUE_I);
-					succ_out.flush();
-					Log.d(TAG, KEY_I + "," + VALUE_I + " sent to > " + succ);
-					succ_out.close();
-					succ_socket.close();
-
-				} catch (IOException e) {
-					e.printStackTrace();
-					Log.e(TAG, "Exception");
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				}
-			}
-			//REPLICA Logic end
-
-			return resultUri;
-		}
-		else{
-			//send the message to successor
-			Log.d(TAG, "Insert condition : successor insert > Successor = " + Successor + " > " + KEY_I);
-
-			Socket succ_socket = null;
+			lst.add(port);
 			try {
-				succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
-				DataOutputStream succ_out = null;
-				succ_out = new DataOutputStream(succ_socket.getOutputStream());
+				Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port)*2);
+				DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
+
 				Thread.sleep(10);
+
 				succ_out.writeUTF(INSERT + ":" + KEY_I + "," + VALUE_I);
 				succ_out.flush();
-				Log.d(TAG, KEY_I + "," + VALUE_I + " sent to > " + Successor);
+				Log.d(TAG, KEY_I + "," + VALUE_I + " sent to > " + port);
+
+
 				succ_out.close();
 				succ_socket.close();
 
@@ -249,23 +185,23 @@ public class SimpleDynamoProvider extends ContentProvider {
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
-		}
 
-		return null;
+		}
+		Log.d(KEY_I,"MESSAGE " + KEY_I + " : " + hash_key +" bucketed in : " + lst.get(0) + ", " + lst.get(1) + ", " + lst.get(2));
+
 	}
 
 	public Uri insert(Uri uri, ContentValues values, String type) { //REPLICATION = Local Insertion
 
+		String TAG = INSERT;
 		String KEY_I = values.getAsString(key);
 		String VALUE_I = values.getAsString(value);
 
 		SQLiteDatabase db = dbh.getWritableDatabase();
 		long newRowId = db.replace(DBHelper.TABLE_NAME, null, values); //insert won't replace
 		Uri resultUri = ContentUris.withAppendedId(uri, newRowId);
-		//Log.d(TAG, values.toString());
 		Log.d(TAG+"ed", myPort + " : " + KEY_I + " , " + VALUE_I);
 
-		//Log.d(TAG, resultUri.toString());
 		if (newRowId == -1) {
 			Log.v(TAG, "Insertion failed");
 		}
@@ -282,97 +218,127 @@ public class SimpleDynamoProvider extends ContentProvider {
 			cursor =  db.rawQuery("select * from " + TABLE_NAME, null);
 		}
 
-		else if(selection.equals("*")){
-			//cursor = db.rawQuery("select * from " + TABLE_NAME,null);
-			//initiate by sending message to successor of initiator
-
+		else if(selection.equals("*")) {
 			Log.d(TAG, "Query *");
 
-			Socket succ_socket = null;
-			try {
-				succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(myPort)*2);
-				DataOutputStream succ_out = null;
-				DataInputStream succ_in = null;
+			ArrayList<String> result = new ArrayList<String>();
+			String[] remote_port_list = REMOTE_PORTS.split(",");
+			for (String port : remote_port_list) {
+				port = port.trim();
+				try {
+					Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port) * 2);
 
-				//request to self server
-				succ_out = new DataOutputStream(succ_socket.getOutputStream());
-				Thread.sleep(10);
-				succ_out.writeUTF(QUERY + ":" + String.valueOf(REMOTE_PORTS.split(",").length) + " ");
-				succ_out.flush();
-				Log.d(TAG,"Request sent > " + QUERY + ":" + String.valueOf(REMOTE_PORTS.split(",").length) + "to self " + myPort);
+					DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
+					Thread.sleep(10);
+					succ_out.writeUTF(QUERY + ":" + "*" + " ");
+					succ_out.flush();
+					Log.d(TAG, "Request sent > " + QUERY + ":" + "*");
 
-				succ_in = new DataInputStream(succ_socket.getInputStream());
-				String inp_msg = succ_in.readUTF();
-				if (inp_msg != null) {
-					//string to cursor
-					Log.d(TAG,"Message recieved from self > " + inp_msg);
-					Log.d(TAG,"Length of recieced message : " + inp_msg.split(",").length);
-					cursor = getCursorFromList(inp_msg);
-					Log.d(TAG,"Cursor size > " + cursor.getCount());
+					DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
+					String inp_msg = succ_in.readUTF();
+					if (inp_msg != null) {
+						Log.d(TAG, "Message recieved from self > " + inp_msg);
+						Log.d(TAG, "Length of recieced message : " + inp_msg.split(",").length);
+						result.add(inp_msg);
+					}
+
+					succ_out.close();
+					succ_in.close();
+					succ_socket.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+					Log.e("Query * call", "Exception");
+				} catch (InterruptedException e) {
+					e.printStackTrace();
 				}
-				succ_socket.close();
-			} catch (IOException e) {
-				e.printStackTrace();
-				Log.e("Query * call","Exception");
-			} catch (InterruptedException e) {
-				e.printStackTrace();
 			}
+
+			String rs = "";
+			for(String inp : result){
+				if(inp.trim().length()!=0){
+					if(rs.compareTo("")!=0){rs+=",";}
+					rs += inp.trim();
+				}
+			}
+			rs = rs.trim();
+			cursor = getCursorFromList(rs);
 		}
 
-		else if(selection.equals("<=")){
+		else{
+			ArrayList<String> hashed_ports = new ArrayList<String>(5);
+			int coordinator = -1;
+			String hash_key = "";
 			try {
-				cursor = db.rawQuery("select * from " + TABLE_NAME + " where key <= \'" + genHash(Predecessor) + "\'",null);
+				hash_key = genHash(selection);
+				for(String i : REMOTE_PORTS.split(",")){
+					hashed_ports.add(genHash(i.trim()));
+				}
 			} catch (NoSuchAlgorithmException e) {
 				e.printStackTrace();
 			}
-		}
-		else if(sortOrder != null){
-			cursor = db.query(
-					DBHelper.TABLE_NAME,   // The table to query
-					null,             // The array of columns to return (pass null to get all)
-					"key='" + selection + "'",              // The columns for the WHERE clause
-					selectionArgs,          // The values for the WHERE clause
-					null,                   // don't group the rows
-					null,                   // don't filter by row groups
-					null               // The sort order
-			);
-		}
-		else{
-			Socket succ_socket = null;
-			try {
-				succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(myPort)*2);
-				DataOutputStream succ_out = null;
-				DataInputStream succ_in = null;
 
-				//request to self server
-				succ_out = new DataOutputStream(succ_socket.getOutputStream());
-				Thread.sleep(10);
-				succ_out.writeUTF(QUERY_SINGLE + ":" + selection + " ");
-				succ_out.flush();
-				Log.d(TAG,"Request sent > " + QUERY_SINGLE + ":" + selection);
+			if(hash_key.compareTo(hashed_ports.get(0))<= 0){ coordinator = 0;}
+			else if(hash_key.compareTo(hashed_ports.get(1))<= 0){ coordinator = 1;}
+			else if(hash_key.compareTo(hashed_ports.get(2))<= 0){ coordinator = 2;}
+			else if(hash_key.compareTo(hashed_ports.get(3))<= 0){ coordinator = 3;}
+			else if(hash_key.compareTo(hashed_ports.get(4))<= 0){ coordinator = 4;}
+			else{coordinator = 0;}
 
-				succ_in = new DataInputStream(succ_socket.getInputStream());
-				String inp_msg = succ_in.readUTF();
-				if (inp_msg != null) {
-					//string to cursor
-					Log.d(TAG,"Message recieved > " + inp_msg);
-					cursor = getCursorFromList(inp_msg);
-					Log.d(TAG,"Cursor size > " + cursor.getCount());
+			for(int i=0; i<3; i++) {		//not essential
+				int ind = (coordinator + i) % 5;
+				String port = REMOTE_PORTS.split(",")[ind].trim();
+
+				try {
+					Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port) * 2);
+
+					DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
+					Thread.sleep(10);
+					succ_out.writeUTF(QUERY_SINGLE + ":" + selection + " ");
+					succ_out.flush();
+					Log.d(TAG, "Request sent > " + QUERY_SINGLE + ":" + selection + " > " + port);
+
+					DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
+					String inp_msg = succ_in.readUTF();
+					if (inp_msg != null) {
+						Log.d(TAG, "Message recieved > " + inp_msg);
+						Log.d(TAG, "Length of recieced message : " + inp_msg.split(",").length);
+						if (inp_msg.split(",").length != 2){continue;}
+						else {
+							cursor = getCursorFromList(inp_msg.trim());
+							Log.d(TAG, "Cursor size > " + cursor.getCount());
+							break;
+						}
+
+					}
+					succ_out.close();
+					succ_in.close();
+					succ_socket.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+					Log.e("Query * call", "Exception");
+				} catch (InterruptedException e) {
+					e.printStackTrace();
 				}
-				succ_socket.close();
-			} catch (IOException e) {
-				e.printStackTrace();
-				Log.e("Query * call","Exception");
-			} catch (InterruptedException e) {
-				e.printStackTrace();
 			}
-
 		}
-
 		return cursor;
 	}
 
-	@Override
+	public Cursor query_helper(Uri uri, String[] projection, String selection,
+						String[] selectionArgs, String sortOrder) {
+		SQLiteDatabase db = dbh.getWritableDatabase();
+		Cursor cursor = db.query(
+				DBHelper.TABLE_NAME,   // The table to query
+				null,             // The array of columns to return (pass null to get all)
+				"key='" + selection + "'",              // The columns for the WHERE clause
+				selectionArgs,          // The values for the WHERE clause
+				null,                   // don't group the rows
+				null,                   // don't filter by row groups
+				null               // The sort order
+		);
+		return cursor;
+	}
+		@Override
 	public int update(Uri uri, ContentValues values, String selection,
 					  String[] selectionArgs) {
 		// TODO Auto-generated method stub
@@ -384,98 +350,86 @@ public class SimpleDynamoProvider extends ContentProvider {
 		SQLiteDatabase db = dbh.getWritableDatabase();
 		int row_count = 0;
 		if(selection.equals("@")){
-			//db.execSQL("delete from " + TABLE_NAME);
-
 			//https://stackoverflow.com/questions/9599741/how-to-delete-all-record-from-table-in-sqlite-with-android
 			row_count = db.delete(TABLE_NAME, "1", null);
 		}
 		else if(selection.equals("*")){
-			//db.execSQL("delete from " + TABLE_NAME);
+			for (String port : REMOTE_PORTS.split(",")) {
+				try {
+					port = port.trim();
+					Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port) * 2);
 
-			//row_count = db.delete(TABLE_NAME, "1", null);
+					DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
+					Thread.sleep(10);
+					succ_out.writeUTF(DELETE + ":" + "*" + " ");
+					succ_out.flush();
 
-			//call delete of successor
-
-			//String[] temp = REMOTE_PORTS.split(",");
-
-			Socket succ_socket = null;
-			try {
-				succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(myPort)*2);
-				DataOutputStream succ_out = null;
-				DataInputStream succ_in = null;
-
-				succ_out = new DataOutputStream(succ_socket.getOutputStream());
-				Thread.sleep(10);
-				succ_out.writeUTF(DELETE + ":" + REMOTE_PORTS.length() + " ");
-				succ_out.flush();
-
-				String inp_msg = succ_in.readUTF();
-				if(inp_msg!=null){
-					row_count = Integer.parseInt(inp_msg);
+				} catch (IOException e) {
+					e.printStackTrace();
+					Log.e("Delete * call", "Exception");
+				} catch (InterruptedException e) {
+					e.printStackTrace();
 				}
-
-			} catch (IOException e) {
-				e.printStackTrace();
-				Log.e("Delete * call","Exception");
-			} catch (InterruptedException e) {
-				e.printStackTrace();
 			}
 		}
-		else if(selection.equals("<=")){
-			try {
-				//db.execSQL("delete from " + TABLE_NAME + " where key <= \"" + genHash(Predecessor) + "\"");
+		else{
+			String TAG = DELETE_SINGLE;
+			ArrayList<String> hashed_ports = new ArrayList<String>(5);
+			int coordinator = -1;
 
-				//https://stackoverflow.com/questions/7510219/deleting-row-in-sqlite-in-android
-				row_count = db.delete(TABLE_NAME, key + " <= '" + genHash(Predecessor) + "'", null);
+			String hash_key = "";
+			try {
+				hash_key = genHash(selection);
+				for(String i : REMOTE_PORTS.split(",")){
+					hashed_ports.add(genHash(i.trim()));
+				}
 			} catch (NoSuchAlgorithmException e) {
 				e.printStackTrace();
 			}
-		}
 
-		else if(selectionArgs!=null){
-			String TAG = DELETE_SINGLE;
-			row_count = db.delete(TABLE_NAME, key + " = '" + selection + "'", null);
-			Log.d(TAG,"Delete count in AVD " + myPort + " > " + row_count);
-			Log.d("Delete", "Delete count > " + row_count);
-			return row_count;
-		}
+			if(hash_key.compareTo(hashed_ports.get(0))< 0){ coordinator = 0;}
+			else if(hash_key.compareTo(hashed_ports.get(1))<= 0){ coordinator = 1;}
+			else if(hash_key.compareTo(hashed_ports.get(2))<= 0){ coordinator = 2;}
+			else if(hash_key.compareTo(hashed_ports.get(3))<= 0){ coordinator = 3;}
+			else if(hash_key.compareTo(hashed_ports.get(4))<= 0){ coordinator = 4;}
+			else{coordinator = 0;}
 
-		else{
-			String TAG = DELETE_SINGLE;
-			//row_count = db.delete(TABLE_NAME, key + " = '" + selection + "'", null);
-			//Log.d(TAG,"Delete count in AVD " + myPort + " > " + row_count);
-			//if (row_count == 0){
-			Socket succ_socket = null;
-			try {
-				//Sending to self
-				succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(myPort)*2);
-				DataOutputStream succ_out = null;
-				DataInputStream succ_in = null;
-				Log.d(TAG, "Sending delete request to self > " + myPort);
+			//get list of ports to which the data is to be deleted
+			String[] Remote_Port_List = REMOTE_PORTS.split(",");
+			for(int i=0; i<3; i++){
+				int ind = (coordinator + i)%5;
+				String port = Remote_Port_List[ind].trim();
 
-				succ_out = new DataOutputStream(succ_socket.getOutputStream());
-				Thread.sleep(10);
-				succ_out.writeUTF(DELETE_SINGLE + ":" + selection + "," + myPort);
-				succ_out.flush();
+				try {
+					Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port)*2);
+					DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
 
-				Log.d(TAG,"Message sent to successor > " + DELETE_SINGLE + ":" + selection + "," + myPort);
+					Thread.sleep(10);
 
-				succ_in = new DataInputStream(succ_socket.getInputStream());
-				String inp_msg = succ_in.readUTF();
-				if(inp_msg!=null){
-					Log.d(TAG, "Message from successor > " + row_count);
-					inp_msg = inp_msg.trim();
-					row_count = Integer.parseInt(inp_msg);
+					succ_out.writeUTF(DELETE_SINGLE + ":" + selection );
+					succ_out.flush();
+
+					Log.d(TAG, selection + " sent to > " + port);
+					succ_out.close();
+					succ_socket.close();
+
+				} catch (IOException e) {
+					e.printStackTrace();
+					Log.e(TAG,"Exception");
+				} catch (InterruptedException e) {
+					e.printStackTrace();
 				}
-
-			} catch (IOException e) {
-				e.printStackTrace();
-				Log.e("Delete single","Exception");
-			} catch (InterruptedException e) {
-				e.printStackTrace();
 			}
 		}
 
+		//Log.d("Delete", "Delete count > " + row_count);
+		return row_count;
+	}
+
+	public int delete_single(Uri uri, String selection, String[] selectionArgs) {
+		SQLiteDatabase db = dbh.getWritableDatabase();
+		int row_count = db.delete(TABLE_NAME, key + " = '" + selection + "'", null);
+		Log.d(TAG,"Delete count in AVD " + myPort + " > " + row_count);
 		Log.d("Delete", "Delete count > " + row_count);
 		return row_count;
 	}
@@ -490,12 +444,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 				try {
 					Socket socket = serverSocket.accept();
 					DataInputStream in = new DataInputStream(socket.getInputStream());
-					//DataOutputStream out = new DataOutputStream(socket.getOutputStream());
 					String msgRecieved = in.readUTF();
 
 					if (null != msgRecieved) {
 						Log.d("SERVER_"+myPort,"Socket Accepted");
-						//Log.d("SERVER_"+myPort,msgRecieved);
 						String[] msgs = msgRecieved.split(":");
 						Log.d("SERVER_REC" , msgRecieved);
 						String TAG_input = msgs[0].trim();
@@ -509,53 +461,110 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 							Log.d(TAG,"Ports list before : " + REMOTE_PORTS);
 
-							//add the node to REMOTE PORTS list;
-							if (!REMOTE_PORTS.equals("")) {
-								REMOTE_PORTS += ",";
-							} //add "," if not the first port in list
-							REMOTE_PORTS += payload;
+							if(REMOTE_PORTS.contains(payload)){
+								//find predecessor1
+								//find predecessor2
+								//find successor1
+								//find successor2
+								String pred1 = "";
+								String pred2 = "";
+								String succ1 = "";
+								String succ2 = "";
+								String[] ports_lst = REMOTE_PORTS.split(",");
+								for(int i = 0; i < ports_lst.length; i++){
+									if(ports_lst[i].trim().compareTo(myPort.trim()) == 0){
+										if(i==0){
+											pred1 = ports_lst[3].trim();
+											pred2 = ports_lst[4].trim();
+											succ1 = ports_lst[1].trim();
+											succ2 = ports_lst[2].trim();
+										}
+										else if(i==1){
+											pred1 = ports_lst[4].trim();
+											pred2 = ports_lst[0].trim();
+											succ1 = ports_lst[2].trim();
+											succ2 = ports_lst[3].trim();
+										}
+										else if(i==2){
+											pred1 = ports_lst[0].trim();
+											pred2 = ports_lst[1].trim();
+											succ1 = ports_lst[3].trim();
+											succ2 = ports_lst[4].trim();
+										}
+										else if(i==3){
+											pred1 = ports_lst[1].trim();
+											pred2 = ports_lst[2].trim();
+											succ1 = ports_lst[4].trim();
+											succ2 = ports_lst[0].trim();
+										}
+										else{
+											pred1 = ports_lst[2].trim();
+											pred2 = ports_lst[3].trim();
+											succ1 = ports_lst[0].trim();
+											succ2 = ports_lst[1].trim();
+										}
+										break;
+									}
+								}
 
-							//Log.d(TAG,REMOTE_PORTS);
-							Log.d(TAG,"Ports list after : " + REMOTE_PORTS);
+								//get predecessor1 local data
+								//get predecessor2 local data
+								//get replicas of myPort in successor1
+								//if successor1 failed, get replicas of myPort in successor2
 
-							//sort the REMOTE_PORT list
-							REMOTE_PORTS = sort_ports(REMOTE_PORTS);
-							Log.d(TAG,"Ports list sorted : " + REMOTE_PORTS);
-
-
-							Log.d(TAG, "Predecessor, Successor : " + Predecessor+","+Successor);
-							//update predecessor
-							//update successor
-							String[] ports_ar = REMOTE_PORTS.split(",");
-							String[] ports_arr = new String[ports_ar.length];
-							for(int i=0; i<ports_ar.length; i++){
-								ports_arr[i] = ports_ar[i].trim();
+								//all gets as string
+								//concat all the strings
+								//insert <key,value> pair one by one
 							}
-							if(ports_arr.length > 1){
-								int my_ind = Arrays.asList(ports_arr).indexOf(myPort);
-								int len = ports_arr.length;
-								int pred_ind = (my_ind-1)%len;
-								pred_ind = pred_ind>=0? pred_ind : len + pred_ind;
-								int succ_ind = (my_ind+1)%len;
-								Predecessor = ports_arr[pred_ind];
-								Successor = ports_arr[succ_ind];
-							}
-							Log.d(TAG, "Predecessor, Successor : " + Predecessor+","+Successor +" myport: "+myPort);
+							else {
+								//add the node to REMOTE PORTS list;
+								if (!REMOTE_PORTS.equals("")) {
+									REMOTE_PORTS += ",";
+								} //add "," if not the first port in list
+								REMOTE_PORTS += payload;
 
-							String first_port = "5554";
+								//Log.d(TAG,REMOTE_PORTS);
+								Log.d(TAG, "Ports list after : " + REMOTE_PORTS);
 
-							//send the new node to successor
-							if (!Successor.equals("")){ // && !Successor.equals(first_port)) {
-								Log.d(TAG,"Sending to Successor");
-								Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
-								DataOutputStream succ_out = null;
-								succ_out = new DataOutputStream(succ_socket.getOutputStream());
-								Thread.sleep(10);
-								succ_out.writeUTF(NEW_NODE + ":" + REMOTE_PORTS+ " ");
-								succ_out.flush();
-								Log.d(TAG,NEW_NODE + ":" + REMOTE_PORTS);
-								succ_out.close();
-								succ_socket.close();
+								//sort the REMOTE_PORT list
+								REMOTE_PORTS = sort_ports(REMOTE_PORTS);
+								Log.d(TAG, "Ports list sorted : " + REMOTE_PORTS);
+
+
+								Log.d(TAG, "Predecessor, Successor : " + Predecessor + "," + Successor);
+								//update predecessor
+								//update successor
+								String[] ports_ar = REMOTE_PORTS.split(",");
+								String[] ports_arr = new String[ports_ar.length];
+								for (int i = 0; i < ports_ar.length; i++) {
+									ports_arr[i] = ports_ar[i].trim();
+								}
+								if (ports_arr.length > 1) {
+									int my_ind = Arrays.asList(ports_arr).indexOf(myPort);
+									int len = ports_arr.length;
+									int pred_ind = (my_ind - 1) % len;
+									pred_ind = pred_ind >= 0 ? pred_ind : len + pred_ind;
+									int succ_ind = (my_ind + 1) % len;
+									Predecessor = ports_arr[pred_ind];
+									Successor = ports_arr[succ_ind];
+								}
+								Log.d(TAG, "Predecessor, Successor : " + Predecessor + "," + Successor + " myport: " + myPort);
+
+								String first_port = "5554";
+
+								//send the new node to successor
+								if (!Successor.equals("")) { // && !Successor.equals(first_port)) {
+									Log.d(TAG, "Sending to Successor");
+									Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor) * 2);
+									DataOutputStream succ_out = null;
+									succ_out = new DataOutputStream(succ_socket.getOutputStream());
+									Thread.sleep(10);
+									succ_out.writeUTF(NEW_NODE + ":" + REMOTE_PORTS + " ");
+									succ_out.flush();
+									Log.d(TAG, NEW_NODE + ":" + REMOTE_PORTS);
+									succ_out.close();
+									succ_socket.close();
+								}
 							}
 						}
 
@@ -585,33 +594,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 								Successor = ports_arr[succ_ind];
 
 								Log.d(TAG, "Updated Predecessor, Successor > " + Predecessor + "," + Successor+" myport: "+myPort);
-
-								//repartition chord data
-								if (!Predecessor.equals(old_Predecessor)){
-									//get all rows to be removed into new node
-									Cursor cursor = query(mUri,null,"<=",null,null);
-
-									//send cursor data to predecessor
-									Socket pred_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Predecessor)*2);
-									DataOutputStream pred_out = null;
-									pred_out = new DataOutputStream(pred_socket.getOutputStream());
-
-									while(cursor.moveToNext()) {
-										String KEY_I = cursor.getString(0);
-										String VALUE_I = cursor.getString(1);
-										Thread.sleep(10);
-										pred_out.writeUTF(REHASHING + ":" + KEY_I + "," + VALUE_I);
-										pred_out.flush();
-
-									}
-									pred_out.close();
-									pred_socket.close();
-
-									//remove all keys <= new node key
-									delete(mUri,"<=",null);
-
-									Log.d(TAG, "Repartitioning complete");
-								}
 							}
 
 
@@ -630,49 +612,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 							}
 						}
 
-						else if(TAG_input.equals(REHASHING)){
-							String KEY_I = msgs[1];
-							String VALUE_I = msgs[2];
-
-							ContentValues cv = new ContentValues();
-							cv.put(key, KEY_I);
-							cv.put(value, VALUE_I);
-							Uri t_uri = insert(mUri,cv);
-
-						}
-
 						else if(TAG_input.equals(DELETE)){
-
-							int count = delete(mUri,"@",null);
-
-							if(Integer.parseInt(payload) > 1) {
-
-								Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
-								DataOutputStream succ_out = null;
-								DataInputStream succ_in = null;
-
-								//request to successor
-								succ_out = new DataOutputStream(succ_socket.getOutputStream());
-								Thread.sleep(10);
-								succ_out.writeUTF(DELETE + ":" + String.valueOf(Integer.parseInt(payload) - 1) + " ");
-
-								//succ_out.writeUTF(QUERY + ":" + String.valueOf(Integer.parseInt(payload) - 1));
-								succ_out.flush();
-
-								String inp_msg = succ_in.readUTF();
-								if (inp_msg != null) {
-									count += Integer.parseInt(inp_msg);
-
-									//return msg_load to predecessor
-								}
-								//succ_out.close();
-								succ_socket.close();
-							}
-							DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
-							Thread.sleep(10);
-							pred_out.writeUTF(Integer.toString(count) + " ");
-							pred_out.flush();
-
+							delete(mUri,"@",null);
 						}
 
 						else if(TAG_input.equals(QUERY)){
@@ -680,43 +621,6 @@ public class SimpleDynamoProvider extends ContentProvider {
 							String msg_load = cursor_to_string(cursor_local);
 							msg_load = msg_load.trim();
 							Log.d(TAG,"Mesasge from local AVD : " + msg_load);
-							if(Integer.parseInt(payload) > 1) {
-
-								Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
-								DataOutputStream succ_out = null;
-								DataInputStream succ_in = null;
-
-								//request to successor
-								succ_in = new DataInputStream(succ_socket.getInputStream());
-								succ_out = new DataOutputStream(succ_socket.getOutputStream());
-								Thread.sleep(10);
-								succ_out.writeUTF(QUERY + ":" + String.valueOf(Integer.parseInt(payload) - 1) + " ");
-								succ_out.flush();
-
-								Log.d(TAG,"Requesting from successor : " + Successor);
-
-								String inp_msg = succ_in.readUTF();
-								if (inp_msg != null) {
-									inp_msg = inp_msg.trim();
-									Log.d(TAG,"Mesasge from successor AVD : " + inp_msg);
-									//if (msg_load.trim().equals("") && !inp_msg.trim().equals("")){msg_load+=",";}
-									msg_load += "," + inp_msg;
-									msg_load = msg_load.trim();
-									if(msg_load.equals(",")){msg_load = "";}
-									else {
-										if (msg_load.charAt(0) == ',') {
-											msg_load = msg_load.substring(1, msg_load.length());
-										}
-										if (msg_load.charAt(msg_load.length() - 1) == ',') {
-											msg_load = msg_load.substring(0, msg_load.length() - 1);
-										}
-									}
-									//return msg_load to predecessor
-								}
-								//succ_out.close();
-								succ_socket.close();
-							}
-							msg_load = msg_load.trim();
 							Log.d(TAG, "Message to send > " + msg_load);
 							DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
 							Thread.sleep(10);
@@ -731,50 +635,17 @@ public class SimpleDynamoProvider extends ContentProvider {
 							String VALUE_I = key_val[1].trim();
 							cv.put(key,KEY_I);
 							cv.put(value,VALUE_I);
-							Uri t_uri = insert(mUri,cv);
-						}
-
-						else if(TAG_input.equals(REPLICA)){
-							ContentValues cv = new ContentValues();
-							String[] key_val = payload.split(",");
-							String KEY_I = key_val[0].trim();
-							String VALUE_I = key_val[1].trim();
-							cv.put(key,KEY_I);
-							cv.put(value,VALUE_I);
 							Uri t_uri = insert(mUri,cv,"R");
 						}
 
 						else if(TAG_input.equals(QUERY_SINGLE)){
 							String TAG = QUERY_SINGLE;
-							String return_msg;
+							String return_msg = "";
 							String KEY_I = payload.trim();
-							Cursor cursor = query(mUri,null,KEY_I,null,"KEY");
+							Cursor cursor = query_helper(mUri,null,KEY_I,null, null);
 							return_msg = cursor_to_string(cursor);
 
-							if(cursor.getCount() == 0){
-								Log.d(TAG,"Requesting successor > " + Successor);
-								Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
-								DataOutputStream succ_out = null;
-								DataInputStream succ_in = null;
-
-								//request to successor
-								succ_out = new DataOutputStream(succ_socket.getOutputStream());
-								Thread.sleep(10);
-								succ_out.writeUTF(QUERY_SINGLE + ":" + KEY_I);
-								succ_out.flush();
-
-								succ_in = new DataInputStream(succ_socket.getInputStream());
-								String inp_msg = succ_in.readUTF();
-								Log.d(TAG,"Reply from successor > " + inp_msg);
-								if (inp_msg != null) {
-									Log.d(TAG,"Message from Successor : " + inp_msg);
-									return_msg = inp_msg;
-									//return msg_load to predecessor
-								}
-								//succ_out.close();
-								succ_socket.close();
-							}
-							Log.d(TAG, "Message to send > " + return_msg + " to > "  + Predecessor);
+							Log.d(TAG, "Message to send > " + return_msg + " to > "  + "requester");
 							DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
 							Thread.sleep(100);
 							pred_out.writeUTF(return_msg  + " ");
@@ -782,50 +653,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else if(TAG_input.equals(DELETE_SINGLE)){
-							String[] inp_lst = payload.split(",");
-							String KEY_I = inp_lst[0].trim();
-							String succ_not = inp_lst[1].trim();
-							String[] selectionArgs = new String[1];
-							selectionArgs[0] =  "DUMMY";
-							int row_count = delete(mUri,KEY_I,selectionArgs);
-
-							if(row_count == 0 && !Successor.equals(succ_not)){
-								Socket succ_socket = null;
-								try {
-									//Sending to self
-									succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
-									DataOutputStream succ_out = null;
-									DataInputStream succ_in = null;
-									Log.d(TAG, "Sending delete request to self > " + myPort);
-
-									succ_out = new DataOutputStream(succ_socket.getOutputStream());
-									Thread.sleep(10);
-									succ_out.writeUTF(DELETE_SINGLE + ":" + payload);
-									succ_out.flush();
-
-									Log.d(TAG,"Message sent to successor > " + DELETE_SINGLE + ":" + payload);
-
-									succ_in = new DataInputStream(succ_socket.getInputStream());
-									String inp_msg = succ_in.readUTF();
-									if(inp_msg!=null){
-										Log.d(TAG, "Message from successor > " + row_count);
-										inp_msg = inp_msg.trim();
-										row_count = Integer.parseInt(inp_msg);
-									}
-
-								} catch (IOException e) {
-									e.printStackTrace();
-									Log.e("Delete single","Exception");
-								} catch (InterruptedException e) {
-									e.printStackTrace();
-								}
-							}
-
-							DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
-							Thread.sleep(100);
-							pred_out.writeUTF(Integer.toString(row_count));//  + " ");
-							pred_out.flush();
-
+							String KEY_I = payload.trim();
+							delete_single(mUri,KEY_I,null);
 						}
 
 						in.close();
@@ -915,3 +744,5 @@ public class SimpleDynamoProvider extends ContentProvider {
         return formatter.toString();
     }
 }
+
+//5562, 5556, 5554, 5558, 5560
