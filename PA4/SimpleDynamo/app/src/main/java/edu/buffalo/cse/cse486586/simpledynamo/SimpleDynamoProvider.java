@@ -3,7 +3,6 @@ package edu.buffalo.cse.cse486586.simpledynamo;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -16,9 +15,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Formatter;
 import java.util.HashMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import android.content.ContentProvider;
 import android.content.ContentUris;
@@ -81,7 +77,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
 		//myPort = String.valueOf((Integer.parseInt(portStr) * 2));
 		myPort = String.valueOf(Integer.parseInt(portStr));
-
+		Log.d("ENTRY", myPort);
 		Log.d("Provider_"+myPort, "DBHelper created");
 		try {
 			ServerSocket serverSocket = new ServerSocket(SERVER_PORT);
@@ -90,15 +86,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 			Log.d("SERVER_"+myPort, "Can't create a ServerSocket");
 			return false;
 		}
-		try {
-			new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,NEW_NODE_ENTRY ,myPort).get(20, TimeUnit.MILLISECONDS);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (ExecutionException e) {
-			e.printStackTrace();
-		} catch (TimeoutException e) {
-			e.printStackTrace();
-		}
+
+		new ClientTask().executeOnExecutor(AsyncTask.SERIAL_EXECUTOR,NEW_NODE_ENTRY ,myPort);
+
 		return dbh != null;
 	}
 
@@ -108,17 +98,15 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 		protected Void doInBackground(String... msgs) {
 
-			REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
+			//REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
 			String TAG = NEW_NODE_ENTRY+"_"+myPort;
 			String msgToSend = myPort;
 			Log.i(TAG, "Message to send : " + msgToSend);
 
-			Socket socket;
 			if (null != msgToSend || !msgToSend.isEmpty()) {
 				//Client logic
-
 				try {
-					socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(COORD_PORT));
+					Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(COORD_PORT));
 					DataOutputStream out = new DataOutputStream(socket.getOutputStream());
 
 					Thread.sleep(10);
@@ -485,7 +473,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 						String[] msgs = msgRecieved.split(":");
 						Log.d("SERVER_REC" , msgRecieved);
 						String TAG_input = msgs[0].trim();
+
 						String payload = msgs[1].trim();
+						Log.d(TAG,"Executing case: " + TAG_input + " Payload Value " + payload);
 
 						//NEW NODE ENTRY at 5554
 						if (TAG_input.equals(NEW_NODE_ENTRY)) {
@@ -494,16 +484,30 @@ public class SimpleDynamoProvider extends ContentProvider {
 							Log.d(TAG, "Payload received : " + payload);
 
 							Log.d(TAG,"Ports list before : " + REMOTE_PORTS);
+							Log.d("ENTER RECOVERY:", String.valueOf(REMOTE_PORTS.contains(payload)));
+
+							Boolean check = payload.equals("5554") && check();
+							Log.d("5554 RECOVERY:", check.toString());
+
+							if(check){
+								//check if 5556 exists
+								REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
+							}
+                            Log.d("ENTER RECOVERY:", String.valueOf(REMOTE_PORTS.contains(payload)));
 
 							if(REMOTE_PORTS.contains(payload)) {
+								REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
 								Log.d("CHECK:",payload + " in " + REMOTE_PORTS);
-                                DataOutputStream succ_out = new DataOutputStream(socket.getOutputStream());
-                                Thread.sleep(10);
-                                succ_out.writeUTF(RECOVERY + ":" + REMOTE_PORTS + " ");
-                                succ_out.flush();
-                                Log.d(TAG, RECOVERY + ":" + REMOTE_PORTS);
-                                succ_out.close();
 
+								Socket new_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(payload) * 2);
+                                DataOutputStream succ_out = new DataOutputStream(new_socket.getOutputStream());
+
+                                Thread.sleep(10);
+                                succ_out.writeUTF(RECOVERY + ":" + "dummy");
+                                succ_out.flush();
+                                Log.d(TAG, RECOVERY + ":" + "dummy");
+                                succ_out.close();
+                                new_socket.close();
 							}
 							else {
 								//add the node to REMOTE PORTS list;
@@ -557,6 +561,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else if(TAG_input.equals(RECOVERY)){
+							REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
 							String TAG = RECOVERY;
                             //REMOTE_PORTS = payload;
                             Log.d(TAG, "Updated REMOTE_PORTS > " + REMOTE_PORTS);
@@ -588,7 +593,7 @@ public class SimpleDynamoProvider extends ContentProvider {
                                         pred2 = ports_lst[2].trim();
                                         succ1 = ports_lst[4].trim();
                                         succ2 = ports_lst[0].trim();
-                                    } else {
+                                    } else if (i ==4){
                                         pred1 = ports_lst[2].trim();
                                         pred2 = ports_lst[3].trim();
                                         succ1 = ports_lst[0].trim();
@@ -615,11 +620,13 @@ public class SimpleDynamoProvider extends ContentProvider {
                                     Log.d(TAG, "Request sent > " + GET_LOCAL + ":" + "dummy");
 
                                     DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
-                                    String inp_msg = succ_in.readUTF();
+                                    String inp_msg = succ_in.readUTF().trim();
                                     if (null != inp_msg) {
                                         Log.d(TAG, "Message recieved from self > " + inp_msg);
-                                        Log.d(TAG, "Length of recieced message : " + inp_msg.split(",").length);
-                                        results.add(inp_msg);
+                                        int len = inp_msg.split(",").length;
+                                        Log.d(TAG, "Length of recieced message : " + len);
+                                        if(len%2 == 0){
+	                                        results.add(inp_msg);}
                                     }
                                     succ_socket.close();
                                 } catch (IOException e) {
@@ -649,11 +656,13 @@ public class SimpleDynamoProvider extends ContentProvider {
                                     Log.d(TAG, "Request sent > " + GET_REPLICA + ":" + myPort);
 
                                     DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
-                                    String inp_msg = succ_in.readUTF();
-                                    if (inp_msg != null) {
+                                    String inp_msg = succ_in.readUTF().trim();
+                                    if (null != inp_msg) {
                                         Log.d(TAG, "Message recieved from self > " + inp_msg);
-                                        Log.d(TAG, "Length of recieced message : " + inp_msg.split(",").length);
-                                        results.add(inp_msg);
+										int len = inp_msg.split(",").length;
+										Log.d(TAG, "Length of recieced message : " + len);
+										if(len%2 == 0){
+											results.add(inp_msg);}
                                     }
                                     succ_socket.close();
 //                                    break;
@@ -681,6 +690,8 @@ public class SimpleDynamoProvider extends ContentProvider {
                                 j--;
                             }
                             result = result.substring(i, j + 1);
+
+                            Log.d(TAG, "Final result string: " + result);
 
                             //insert <key,value> pair one by one
                             String[] vals = result.split(",");
@@ -718,7 +729,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 								int pred_ind = (my_ind-1)%len;
 								pred_ind = pred_ind>=0? pred_ind : len + pred_ind;
 								int succ_ind = (my_ind+1)%len;
-								String old_Predecessor = Predecessor;
+								//String old_Predecessor = Predecessor;
 								//String old_Successor = Successor;
 								Predecessor = ports_arr[pred_ind];
 								Successor = ports_arr[succ_ind];
@@ -729,11 +740,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 							String first_port = "5554";
 
-							if (Successor!="" && !Successor.equals(first_port)) {
+							if (!Successor.isEmpty() && !Successor.equals(first_port)) {
 
 								Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(Successor)*2);
-								DataOutputStream succ_out = null;
-								succ_out = new DataOutputStream(succ_socket.getOutputStream());
+								DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
 								Thread.sleep(10);
 								succ_out.writeUTF(NEW_NODE + ":" + REMOTE_PORTS +" ");
 								succ_out.flush();
@@ -783,7 +793,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 							Log.d(TAG, "Message to send > " + return_msg + " to > "  + "requester");
 							DataOutputStream pred_out = new DataOutputStream(socket.getOutputStream());
-							Thread.sleep(100);
+							Thread.sleep(10);
 							pred_out.writeUTF(return_msg  + " ");
 							pred_out.flush();
 						}
@@ -796,7 +806,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						else if(TAG_input.equals(GET_LOCAL)){
 							DataOutputStream out = new DataOutputStream(socket.getOutputStream());
 							String return_msg = map.get(myPort);
-							Thread.sleep(100);
+							Thread.sleep(10);
 							out.writeUTF(return_msg + " ");
 							out.flush();
 							Log.d(TAG, "Message to send > " + return_msg + " to > "  + "requester");
@@ -805,10 +815,18 @@ public class SimpleDynamoProvider extends ContentProvider {
 						else if(TAG_input.equals(GET_REPLICA)){
 							DataOutputStream out = new DataOutputStream(socket.getOutputStream());
 							String return_msg = map.get(payload);
-							Thread.sleep(100);
+							Thread.sleep(10);
 							out.writeUTF(return_msg + " ");
 							out.flush();
 							Log.d(TAG, "Message to send > " + return_msg + " to > "  + "requester");
+						}
+
+						else if(TAG_input.equals("dummy")){
+							DataOutputStream d_out = new DataOutputStream(socket.getOutputStream());
+							Thread.sleep(10);
+							d_out.writeUTF("ACK");
+							d_out.flush();
+							d_out.close();
 						}
 
 						in.close();
@@ -897,6 +915,34 @@ public class SimpleDynamoProvider extends ContentProvider {
         }
         return formatter.toString();
     }
+
+    public boolean check(){
+		try {
+			Socket new_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt("5556") * 2);
+			DataOutputStream succ_out = new DataOutputStream(new_socket.getOutputStream());
+
+			Thread.sleep(10);
+			succ_out.writeUTF("dummy:0");
+			succ_out.flush();
+			Log.d(TAG, "dummy:0");
+
+			DataInputStream succ_in = new DataInputStream(new_socket.getInputStream());
+			String inp = succ_in.readUTF().trim();
+			if(inp!=null){
+				if(inp.equals("ACK")){
+					succ_out.close();
+					new_socket.close();
+
+					return true;
+				}
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		return false;
+	}
 }
 
 //5562, 5556, 5554, 5558, 5560
