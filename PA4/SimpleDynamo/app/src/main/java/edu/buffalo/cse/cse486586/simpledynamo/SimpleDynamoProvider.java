@@ -3,6 +3,7 @@ package edu.buffalo.cse.cse486586.simpledynamo;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -188,20 +189,32 @@ public class SimpleDynamoProvider extends ContentProvider {
 				Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port) * 2);
 				DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
 
-				Thread.sleep(10);
+				Thread.sleep(50); //changed
 
 				succ_out.writeUTF(INSERT + ":" + KEY_I + "," + VALUE_I + "," + coord_port + " ");
 				succ_out.flush();
 				Log.d(TAG, KEY_I + "," + VALUE_I + "," + coord_port + " sent to > " + port);
 
-				//succ_out.close();
+				/*
+				DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
+
+				while(true) {
+					String ack = succ_in.readUTF().trim();
+					if (ack != null) {
+						if (ack.equals("ACK")) {
+							Log.d(TAG,"ACK : " + KEY_I);
+							succ_in.close();
+							break;
+						}
+					}
+				}
+				*/
+				succ_out.close();
 				succ_socket.close();
 
 			}
 			Log.d(KEY_I, "MESSAGE " + KEY_I + " : " + hash_key + " bucketed in : " + lst.get(0) + ", " + lst.get(1) + ", " + lst.get(2));
 
-		} catch (InterruptedException e) {
-			e.printStackTrace();
 		} catch (UnknownHostException e) {
 			e.printStackTrace();
 		} catch (IOException e) {
@@ -209,9 +222,11 @@ public class SimpleDynamoProvider extends ContentProvider {
 			Log.e(TAG,"Exception");
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
-		}
+		} catch (InterruptedException e) {
+            e.printStackTrace();
+        }
 
-	}
+    }
 
 	public Uri insert(Uri uri, ContentValues values, String type) { //REPLICATION = Local Insertion
 
@@ -417,6 +432,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 			else{coordinator = 0;}
 
 			//get list of ports to which the data is to be deleted
+			REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560"; //new
 			String[] Remote_Port_List = REMOTE_PORTS.split(",");
 			for(int i=0; i<3; i++){
 				int ind = (coordinator + i)%5;
@@ -479,6 +495,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 						//NEW NODE ENTRY at 5554
 						if (TAG_input.equals(NEW_NODE_ENTRY)) {
+                            map = new HashMap<String, String>();
+                            SQLiteDatabase db = dbh.getWritableDatabase();
+                            int row_count = db.delete(TABLE_NAME, "1", null);
 
 							String TAG = NEW_NODE_ENTRY;
 							Log.d(TAG, "Payload received : " + payload);
@@ -561,6 +580,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else if(TAG_input.equals(RECOVERY)){
+                            map = new HashMap<String, String>();
+							SQLiteDatabase db = dbh.getWritableDatabase();
+							int row_count = db.delete(TABLE_NAME, "1", null);
 							REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
 							String TAG = RECOVERY;
                             //REMOTE_PORTS = payload;
@@ -614,7 +636,7 @@ public class SimpleDynamoProvider extends ContentProvider {
                                     Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(p) * 2);
 
                                     DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                    Thread.sleep(10);
+                                    Thread.sleep(100);
                                     succ_out.writeUTF(GET_LOCAL + ":" + "dummy" + " ");
                                     succ_out.flush();
                                     Log.d(TAG, "Request sent > " + GET_LOCAL + ":" + "dummy");
@@ -648,7 +670,7 @@ public class SimpleDynamoProvider extends ContentProvider {
                                     Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(s) * 2);
 
                                     DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                    Thread.sleep(10);
+                                    Thread.sleep(100);
 
                                     succ_out.writeUTF(GET_REPLICA + ":" + myPort + " ");
                                     succ_out.flush();
@@ -678,35 +700,50 @@ public class SimpleDynamoProvider extends ContentProvider {
                             //concat all the strings
                             String result = "";
                             for (String i : results) {
-                                result += i;
-                                result += ",";
+                                if(!(i.equals("") || i.length()==0)) {
+                                    result += i;
+                                    result += ",";
+                                }
                             }
-                            int i = 0;
-                            int j = result.length() - 1;
-                            while (result.charAt(i) == ',') {
-                                i++;
-                            }
-                            while (result.charAt(j) == ',') {
-                                j--;
-                            }
-                            result = result.substring(i, j + 1);
+                            if(!(result.equals("") || result.length()==0)) {
+                                int i = 0;
+                                int j = result.length() - 1;
+                                while (result.charAt(i) == ',') {
+                                    i++;
+                                }
+                                while (result.charAt(j) == ',') {
+                                    j--;
+                                }
+                                result = result.substring(i, j + 1);
 
+                                //insert <key,value> pair one by one
+                                String[] vals = result.split(",");
+                                for (i = 0; i < vals.length; i += 2) {
+                                    ContentValues cv = new ContentValues();
+
+                                    String KEY_I = vals[i].trim();
+                                    String VALUE_I = vals[i + 1].trim();
+
+                                    cv.put(key, KEY_I);
+                                    cv.put(value, VALUE_I);
+
+                                    Uri t_uri = insert(mUri, cv, "I");
+                                    Log.d(TAG, "Inserted " + KEY_I);
+
+                                    //new
+                                    String bucket = find_bucket(KEY_I).trim();
+                                    String k_v = KEY_I + "," + VALUE_I;
+                                    if (map.get(bucket) != null) {
+                                        if (!map.get(bucket).contains(k_v)) {
+                                            map.put(bucket, map.get(bucket).trim() + "," + KEY_I + "," + VALUE_I);
+                                        }
+                                    } else {
+                                        map.put(bucket, KEY_I + "," + VALUE_I);
+                                    }
+                                }
+                            }
                             Log.d(TAG, "Final result string: " + result);
-
-                            //insert <key,value> pair one by one
-                            String[] vals = result.split(",");
-                            for (i = 0; i < vals.length; i += 2) {
-                                ContentValues cv = new ContentValues();
-
-                                String KEY_I = vals[i].trim();
-                                String VALUE_I = vals[i + 1].trim();
-
-                                cv.put(key, KEY_I);
-                                cv.put(value, VALUE_I);
-
-                                Uri t_uri = insert(mUri, cv, "I");
-                                Log.d(TAG,"Inserted " + KEY_I);
-                            }
+                            Log.d(RECOVERY, "Recovery complete");
                         }
 
 						else if (TAG_input.equals(NEW_NODE)) {
@@ -754,6 +791,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 						else if(TAG_input.equals(DELETE)){
 							delete(mUri,"@",null);
+							map = new HashMap<String, String>();
 						}
 
 						else if(TAG_input.equals(QUERY)){
@@ -779,9 +817,19 @@ public class SimpleDynamoProvider extends ContentProvider {
 							Uri t_uri = insert(mUri,cv,"R");
 
 							String origin_port = key_val[2].trim();
+							String k_v = KEY_I + "," + VALUE_I;
 							if(map.get(origin_port) != null){
-							map.put(origin_port, map.get(origin_port).trim() + "," + KEY_I + "," + VALUE_I);}
+								if (!map.get(origin_port).contains(k_v)) {
+									map.put(origin_port, map.get(origin_port).trim() + "," + KEY_I + "," + VALUE_I);}}
 							else{ map.put(origin_port,  KEY_I + "," + VALUE_I);}
+
+							/*
+							DataOutputStream temp = new DataOutputStream(socket.getOutputStream());
+							//Thread.sleep(10);
+							temp.writeUTF("ACK");
+							temp.flush();
+							temp.close();
+							*/
 						}
 
 						else if(TAG_input.equals(QUERY_SINGLE)){
@@ -801,6 +849,35 @@ public class SimpleDynamoProvider extends ContentProvider {
 						else if(TAG_input.equals(DELETE_SINGLE)){
 							String KEY_I = payload.trim();
 							delete_single(mUri,KEY_I,null);
+							//find the bucket in map with the key and delete the key_value pair from the string
+							//replace ",," as ","
+							//trim "," from end and beginning
+
+							for(String port : map.keySet()){
+								String update = map.get(port);
+
+								if(update.length()==0 || update.equals("")){continue;}
+
+								String key = KEY_I;
+
+								//find the bucket in map with the key and delete the key_value pair from the string
+								update = update + ",";
+								//https://stackoverflow.com/questions/12664392/replace-everything-between-and-in-regex-java
+								update = update.replaceAll(key + ",.*?,",",");
+
+								//replace ",," as ","
+								update = update.replaceAll(",{2,}", ",");
+
+								//trim "," from end and beginning
+								int i = 0;
+								int j = update.length()-1;
+								while(i<= j && update.charAt(i)==','){i++;}
+								while(i<j && update.charAt(j)==','){j--;}
+								update = update.substring(i,j+1);
+								//System.out.println(update);
+								map.put(port, update);
+							}
+
 						}
 
 						else if(TAG_input.equals(GET_LOCAL)){
@@ -842,7 +919,30 @@ public class SimpleDynamoProvider extends ContentProvider {
 		}
 	}
 
-	private String cursor_to_string(Cursor cursor) {
+    private String find_bucket(String key_i) {
+        int coordinator = -1;
+        ArrayList<String> hashed_ports = new ArrayList<String>(5);
+        String hash_key = "";
+        try {
+            hash_key = genHash(key_i);
+            for(String i : REMOTE_PORTS.split(",")){
+                hashed_ports.add(genHash(i.trim()));
+            }
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+
+        if(hash_key.compareTo(hashed_ports.get(0))<= 0){ coordinator = 0;}
+        else if(hash_key.compareTo(hashed_ports.get(1))<= 0){ coordinator = 1;}
+        else if(hash_key.compareTo(hashed_ports.get(2))<= 0){ coordinator = 2;}
+        else if(hash_key.compareTo(hashed_ports.get(3))<= 0){ coordinator = 3;}
+        else if(hash_key.compareTo(hashed_ports.get(4))<= 0){ coordinator = 4;}
+        else{coordinator = 0;}
+
+        return REMOTE_PORTS.split(",")[coordinator];
+    }
+
+    private String cursor_to_string(Cursor cursor) {
 		String msg_pair_collection = "";
 		while(cursor.moveToNext()){
 			if(!msg_pair_collection.equals("")){
