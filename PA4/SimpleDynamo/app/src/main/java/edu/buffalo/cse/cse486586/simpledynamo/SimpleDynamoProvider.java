@@ -495,10 +495,11 @@ public class SimpleDynamoProvider extends ContentProvider {
 
 						//NEW NODE ENTRY at 5554
 						if (TAG_input.equals(NEW_NODE_ENTRY)) {
+							/*
                             map = new HashMap<String, String>();
                             SQLiteDatabase db = dbh.getWritableDatabase();
                             int row_count = db.delete(TABLE_NAME, "1", null);
-
+							*/
 							String TAG = NEW_NODE_ENTRY;
 							Log.d(TAG, "Payload received : " + payload);
 
@@ -580,170 +581,199 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else if(TAG_input.equals(RECOVERY)){
-                            map = new HashMap<String, String>();
-							SQLiteDatabase db = dbh.getWritableDatabase();
-							int row_count = db.delete(TABLE_NAME, "1", null);
-							REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
-							String TAG = RECOVERY;
-                            //REMOTE_PORTS = payload;
-                            Log.d(TAG, "Updated REMOTE_PORTS > " + REMOTE_PORTS);
+							synchronized (map) {
+								map = new HashMap<String, String>();
+								SQLiteDatabase db = dbh.getWritableDatabase();
+								int row_count = db.delete(TABLE_NAME, "1", null);
+								REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
+								String TAG = RECOVERY;
+								//REMOTE_PORTS = payload;
+								Log.d(TAG, "Updated REMOTE_PORTS > " + REMOTE_PORTS);
 
-                            String pred1 = "";
-                            String pred2 = "";
-                            String succ1 = "";
-                            String succ2 = "";
-                            String[] ports_lst = REMOTE_PORTS.split(",");
-                            for (int i = 0; i < ports_lst.length; i++) {
-                                if (ports_lst[i].trim().compareTo(myPort.trim()) == 0) {
-                                    if (i == 0) {
-                                        pred1 = ports_lst[3].trim();
-                                        pred2 = ports_lst[4].trim();
-                                        succ1 = ports_lst[1].trim();
-                                        succ2 = ports_lst[2].trim();
-                                    } else if (i == 1) {
-                                        pred1 = ports_lst[4].trim();
-                                        pred2 = ports_lst[0].trim();
-                                        succ1 = ports_lst[2].trim();
-                                        succ2 = ports_lst[3].trim();
-                                    } else if (i == 2) {
-                                        pred1 = ports_lst[0].trim();
-                                        pred2 = ports_lst[1].trim();
-                                        succ1 = ports_lst[3].trim();
-                                        succ2 = ports_lst[4].trim();
-                                    } else if (i == 3) {
-                                        pred1 = ports_lst[1].trim();
-                                        pred2 = ports_lst[2].trim();
-                                        succ1 = ports_lst[4].trim();
-                                        succ2 = ports_lst[0].trim();
-                                    } else if (i ==4){
-                                        pred1 = ports_lst[2].trim();
-                                        pred2 = ports_lst[3].trim();
-                                        succ1 = ports_lst[0].trim();
-                                        succ2 = ports_lst[1].trim();
-                                    }
-                                }
-                            }
+								String pred1 = "";
+								String pred2 = "";
+								String succ1 = "";
+								String succ2 = "";
+								String[] ports_lst = REMOTE_PORTS.split(",");
+								for (int i = 0; i < ports_lst.length; i++) {
+									if (ports_lst[i].trim().compareTo(myPort.trim()) == 0) {
+										if (i == 0) {
+											pred1 = ports_lst[3].trim();
+											pred2 = ports_lst[4].trim();
+											succ1 = ports_lst[1].trim();
+											succ2 = ports_lst[2].trim();
+										} else if (i == 1) {
+											pred1 = ports_lst[4].trim();
+											pred2 = ports_lst[0].trim();
+											succ1 = ports_lst[2].trim();
+											succ2 = ports_lst[3].trim();
+										} else if (i == 2) {
+											pred1 = ports_lst[0].trim();
+											pred2 = ports_lst[1].trim();
+											succ1 = ports_lst[3].trim();
+											succ2 = ports_lst[4].trim();
+										} else if (i == 3) {
+											pred1 = ports_lst[1].trim();
+											pred2 = ports_lst[2].trim();
+											succ1 = ports_lst[4].trim();
+											succ2 = ports_lst[0].trim();
+										} else if (i == 4) {
+											pred1 = ports_lst[2].trim();
+											pred2 = ports_lst[3].trim();
+											succ1 = ports_lst[0].trim();
+											succ2 = ports_lst[1].trim();
+										}
+									}
+								}
 
-                            //get predecessor1 local data
-                            //get predecessor2 local data
-                            ArrayList<String> results = new ArrayList<String>();
+								//get predecessor1 local data
+								//get predecessor2 local data
+								ArrayList<String> results = new ArrayList<String>();
 
-                            ArrayList<String> preds = new ArrayList<String>(2);
-                            preds.add(pred1);
-                            preds.add(pred2);
-                            for (String p : preds) {
-                                try {
-                                    Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(p) * 2);
+								ArrayList<String> preds = new ArrayList<String>(2);
+								preds.add(pred1);
+								preds.add(pred2);
+								for (String p : preds) {
+									try {
+										Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(p) * 2);
 
-                                    DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                    Thread.sleep(100);
-                                    succ_out.writeUTF(GET_LOCAL + ":" + "dummy" + " ");
-                                    succ_out.flush();
-                                    Log.d(TAG, "Request sent > " + GET_LOCAL + ":" + "dummy");
+										DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
+										Thread.sleep(100);
+										succ_out.writeUTF(GET_LOCAL + ":" + "dummy" + " ");
+										succ_out.flush();
+										Log.d(TAG, "Request sent > " + GET_LOCAL + ":" + "dummy");
 
-                                    DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
-                                    String inp_msg = succ_in.readUTF().trim();
-                                    if (null != inp_msg) {
-                                        Log.d(TAG, "Message recieved from self > " + inp_msg);
-                                        int len = inp_msg.split(",").length;
-                                        Log.d(TAG, "Length of recieced message : " + len);
-                                        if(len%2 == 0){
-	                                        results.add(inp_msg);}
-                                    }
-                                    succ_socket.close();
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                    Log.e(GET_LOCAL, "Exception");
-                                } catch (InterruptedException e) {
-                                    e.printStackTrace();
-                                }
-                            }
+										DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
+										String inp_msg = succ_in.readUTF().trim();
+										if (null != inp_msg) {
 
-                            //get replicas of myPort in successor1
-                            //if successor1 failed, get replicas of myPort in successor2
+											if (!(inp_msg.equals("") || inp_msg.length() == 0)) {
+												int i = 0;
+												int j = inp_msg.length() - 1;
+												while (inp_msg.charAt(i) == ',') {
+													i++;
+												}
+												while (inp_msg.charAt(j) == ',') {
+													j--;
+												}
+												inp_msg = inp_msg.substring(i, j + 1);
+											}
 
-                            ArrayList<String> succs = new ArrayList<String>(2);
-                            succs.add(succ1);
-                            succs.add(succ2);
-                            for (String s : succs) {
-                                try {
-                                    Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(s) * 2);
+											Log.d(TAG, "Message recieved from self > " + inp_msg);
+											int len = inp_msg.split(",").length;
+											Log.d(TAG, "Length of recieced message : " + len);
+											if (len % 2 == 0) {
+												results.add(inp_msg);
+											}
+										}
+										succ_socket.close();
+									} catch (IOException e) {
+										e.printStackTrace();
+										Log.e(GET_LOCAL, "Exception");
+									} catch (InterruptedException e) {
+										e.printStackTrace();
+									}
+								}
 
-                                    DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
-                                    Thread.sleep(100);
+								//get replicas of myPort in successor1
+								//if successor1 failed, get replicas of myPort in successor2
 
-                                    succ_out.writeUTF(GET_REPLICA + ":" + myPort + " ");
-                                    succ_out.flush();
+								ArrayList<String> succs = new ArrayList<String>(2);
+								succs.add(succ1);
+								succs.add(succ2);
+								for (String s : succs) {
+									try {
+										Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(s) * 2);
 
-                                    Log.d(TAG, "Request sent > " + GET_REPLICA + ":" + myPort);
+										DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
+										Thread.sleep(100);
 
-                                    DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
-                                    String inp_msg = succ_in.readUTF().trim();
-                                    if (null != inp_msg) {
-                                        Log.d(TAG, "Message recieved from self > " + inp_msg);
-										int len = inp_msg.split(",").length;
-										Log.d(TAG, "Length of recieced message : " + len);
-										if(len%2 == 0){
-											results.add(inp_msg);}
-                                    }
-                                    succ_socket.close();
+										succ_out.writeUTF(GET_REPLICA + ":" + myPort + " ");
+										succ_out.flush();
+
+										Log.d(TAG, "Request sent > " + GET_REPLICA + ":" + myPort);
+
+										DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
+										String inp_msg = succ_in.readUTF().trim();
+										if (null != inp_msg) {
+											if (!(inp_msg.equals("") || inp_msg.length() == 0)) {
+												int i = 0;
+												int j = inp_msg.length() - 1;
+												while (inp_msg.charAt(i) == ',') {
+													i++;
+												}
+												while (inp_msg.charAt(j) == ',') {
+													j--;
+												}
+												inp_msg = inp_msg.substring(i, j + 1);
+											}
+											Log.d(TAG, "Message recieved from self > " + inp_msg);
+											int len = inp_msg.split(",").length;
+											Log.d(TAG, "Length of recieced message : " + len);
+											if (len % 2 == 0) {
+												results.add(inp_msg);
+											}
+										}
+										succ_socket.close();
 //                                    break;
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                    Log.e(GET_LOCAL, "Exception");
-                                } catch (InterruptedException e) {
-                                    e.printStackTrace();
-                                }
-                            }
+									} catch (IOException e) {
+										e.printStackTrace();
+										Log.e(GET_LOCAL, "Exception");
+									} catch (InterruptedException e) {
+										e.printStackTrace();
+									}
+								}
 
-                            //all gets as string
-                            //concat all the strings
-                            String result = "";
-                            for (String i : results) {
-                                if(!(i.equals("") || i.length()==0)) {
-                                    result += i;
-                                    result += ",";
-                                }
-                            }
-                            if(!(result.equals("") || result.length()==0)) {
-                                int i = 0;
-                                int j = result.length() - 1;
-                                while (result.charAt(i) == ',') {
-                                    i++;
-                                }
-                                while (result.charAt(j) == ',') {
-                                    j--;
-                                }
-                                result = result.substring(i, j + 1);
+								//all gets as string
+								//concat all the strings
+								String result = "";
+								for (String i : results) {
+									if (!(i.equals("") || i.length() == 0)) {
+										result += i;
+										result += ",";
+									}
+								}
+								if (!(result.equals("") || result.length() == 0)) {
+									int i = 0;
+									int j = result.length() - 1;
+									while (result.charAt(i) == ',') {
+										i++;
+									}
+									while (result.charAt(j) == ',') {
+										j--;
+									}
+									result = result.substring(i, j + 1);
 
-                                //insert <key,value> pair one by one
-                                String[] vals = result.split(",");
-                                for (i = 0; i < vals.length; i += 2) {
-                                    ContentValues cv = new ContentValues();
+									//insert <key,value> pair one by one
+									String[] vals = result.split(",");
+									for (i = 0; i < vals.length; i += 2) {
+										ContentValues cv = new ContentValues();
 
-                                    String KEY_I = vals[i].trim();
-                                    String VALUE_I = vals[i + 1].trim();
+										String KEY_I = vals[i].trim();
+										String VALUE_I = vals[i + 1].trim();
 
-                                    cv.put(key, KEY_I);
-                                    cv.put(value, VALUE_I);
+										cv.put(key, KEY_I);
+										cv.put(value, VALUE_I);
 
-                                    Uri t_uri = insert(mUri, cv, "I");
-                                    Log.d(TAG, "Inserted " + KEY_I);
+										Uri t_uri = insert(mUri, cv, "I");
+										Log.d(TAG, "Inserted " + KEY_I);
 
-                                    //new
-                                    String bucket = find_bucket(KEY_I).trim();
-                                    String k_v = KEY_I + "," + VALUE_I;
-                                    if (map.get(bucket) != null) {
-                                        if (!map.get(bucket).contains(k_v)) {
-                                            map.put(bucket, map.get(bucket).trim() + "," + KEY_I + "," + VALUE_I);
-                                        }
-                                    } else {
-                                        map.put(bucket, KEY_I + "," + VALUE_I);
-                                    }
-                                }
-                            }
-                            Log.d(TAG, "Final result string: " + result);
-                            Log.d(RECOVERY, "Recovery complete");
+										//new
+										String bucket = find_bucket(KEY_I).trim();
+										String k_v = KEY_I + "," + VALUE_I;
+										if (map.get(bucket) != null) {
+											if (!map.get(bucket).contains(k_v)) {
+												map.put(bucket, map.get(bucket).trim() + "," + KEY_I + "," + VALUE_I);
+											}
+										} else {
+											map.put(bucket, KEY_I + "," + VALUE_I);
+										}
+									}
+								}
+								Log.d(TAG, "Final result string: " + result);
+								Log.d(RECOVERY, "Recovery complete");
+							}
+
                         }
 
 						else if (TAG_input.equals(NEW_NODE)) {
