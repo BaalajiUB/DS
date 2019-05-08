@@ -189,7 +189,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 				Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(port) * 2);
 				DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
 
-				Thread.sleep(50); //changed
+				Thread.sleep(100); //changed
 
 				succ_out.writeUTF(INSERT + ":" + KEY_I + "," + VALUE_I + "," + coord_port + " ");
 				succ_out.flush();
