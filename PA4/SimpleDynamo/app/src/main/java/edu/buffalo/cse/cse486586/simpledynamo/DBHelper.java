@@ -16,7 +16,7 @@ public class DBHelper extends SQLiteOpenHelper {
 
     private static final String SQL_CREATE_ENTRIES =
             "CREATE TABLE " + TABLE_NAME + " ( " +
-                    key + " TEXT NOT NULL PRIMARY KEY, " +
+                    key + " TEXT PRIMARY KEY, " +
                     value + " TEXT NOT NULL " + ")";
 
     private static final String SQL_DELETE_ENTRIES =
@@ -28,13 +28,15 @@ public class DBHelper extends SQLiteOpenHelper {
 
     @Override
     public void onCreate(SQLiteDatabase db) {
+        db.execSQL(SQL_DELETE_ENTRIES);
+
         db.execSQL(SQL_CREATE_ENTRIES);
         Log.d(TAG,"TABLE created");
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        db.execSQL(SQL_DELETE_ENTRIES);
+        //db.execSQL(SQL_DELETE_ENTRIES);
         onCreate(db);
     }
 }

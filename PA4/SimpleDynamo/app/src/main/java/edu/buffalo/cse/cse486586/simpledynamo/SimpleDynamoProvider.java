@@ -73,6 +73,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 	@Override
 	public boolean onCreate() {
 		// TODO Auto-generated method stub
+		map = new HashMap<String, String>();
 		dbh = new DBHelper(getContext());
 		TelephonyManager tel = (TelephonyManager) getContext().getSystemService(Context.TELEPHONY_SERVICE);
 		String portStr = tel.getLine1Number().substring(tel.getLine1Number().length() - 4);
@@ -223,10 +224,10 @@ public class SimpleDynamoProvider extends ContentProvider {
 		} catch (NoSuchAlgorithmException e) {
 			e.printStackTrace();
 		} catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+			e.printStackTrace();
+		}
 
-    }
+	}
 
 	public Uri insert(Uri uri, ContentValues values, String type) { //REPLICATION = Local Insertion
 
@@ -309,7 +310,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 		}
 
 		else{
-		    Log.d(QUERY, selection);
+			Log.d(QUERY, selection);
+			REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
 			ArrayList<String> hashed_ports = new ArrayList<String>(5);
 			int coordinator = -1;
 			String hash_key = "";
@@ -370,7 +372,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 	}
 
 	public Cursor query_helper(Uri uri, String[] projection, String selection,
-						String[] selectionArgs, String sortOrder) {
+							   String[] selectionArgs, String sortOrder) {
+		try {
+			Thread.sleep(120);
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+
 		SQLiteDatabase db = dbh.getWritableDatabase();
 		Cursor cursor = db.query(
 				DBHelper.TABLE_NAME,   // The table to query
@@ -383,7 +391,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		);
 		return cursor;
 	}
-		@Override
+	@Override
 	public int update(Uri uri, ContentValues values, String selection,
 					  String[] selectionArgs) {
 		// TODO Auto-generated method stub
@@ -521,21 +529,21 @@ public class SimpleDynamoProvider extends ContentProvider {
 								//check if 5556 exists
 								REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
 							}
-                            Log.d("ENTER RECOVERY:", String.valueOf(REMOTE_PORTS.contains(payload)));
+							Log.d("ENTER RECOVERY:", String.valueOf(REMOTE_PORTS.contains(payload)));
 
 							if(REMOTE_PORTS.contains(payload)) {
 								REMOTE_PORTS = "5562, 5556, 5554, 5558, 5560";
 								Log.d("CHECK:",payload + " in " + REMOTE_PORTS);
 
 								Socket new_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(payload) * 2);
-                                DataOutputStream succ_out = new DataOutputStream(new_socket.getOutputStream());
+								DataOutputStream succ_out = new DataOutputStream(new_socket.getOutputStream());
 
-                                Thread.sleep(10);
-                                succ_out.writeUTF(RECOVERY + ":" + "dummy");
-                                succ_out.flush();
-                                Log.d(TAG, RECOVERY + ":" + "dummy");
-                                succ_out.close();
-                                new_socket.close();
+								Thread.sleep(10);
+								succ_out.writeUTF(RECOVERY + ":" + "dummy");
+								succ_out.flush();
+								Log.d(TAG, RECOVERY + ":" + "dummy");
+								succ_out.close();
+								new_socket.close();
 							}
 							else {
 								//add the node to REMOTE PORTS list;
@@ -589,7 +597,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else if(TAG_input.equals(RECOVERY)){
-							synchronized (map) {
+							//synchronized (map) {
 								map = new HashMap<String, String>();
 								SQLiteDatabase db = dbh.getWritableDatabase();
 								int row_count = db.delete(TABLE_NAME, "1", null);
@@ -646,7 +654,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 										Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(p) * 2);
 
 										DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
-										Thread.sleep(100);
+										Thread.sleep(10);
 										succ_out.writeUTF(GET_LOCAL + ":" + "dummy" + " ");
 										succ_out.flush();
 										Log.d(TAG, "Request sent > " + GET_LOCAL + ":" + "dummy");
@@ -666,6 +674,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 												}
 												inp_msg = inp_msg.substring(i, j + 1);
 											}
+											//map.put(p,inp_msg);
 
 											Log.d(TAG, "Message recieved from self > " + inp_msg);
 											int len = inp_msg.split(",").length;
@@ -694,12 +703,12 @@ public class SimpleDynamoProvider extends ContentProvider {
 										Socket succ_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt(s) * 2);
 
 										DataOutputStream succ_out = new DataOutputStream(succ_socket.getOutputStream());
-										Thread.sleep(100);
+										Thread.sleep(10);
 
 										succ_out.writeUTF(GET_REPLICA + ":" + myPort + " ");
 										succ_out.flush();
 
-										Log.d(TAG, "Request sent > " + GET_REPLICA + ":" + myPort);
+										Log.d(TAG, "Request sent > " + GET_REPLICA + ":" + s);
 
 										DataInputStream succ_in = new DataInputStream(succ_socket.getInputStream());
 										String inp_msg = succ_in.readUTF().trim();
@@ -719,7 +728,8 @@ public class SimpleDynamoProvider extends ContentProvider {
 											int len = inp_msg.split(",").length;
 											Log.d(TAG, "Length of recieced message : " + len);
 											if (len % 2 == 0) {
-												results.add(inp_msg);
+												if(!results.get(results.size()-1).equals(inp_msg)){
+													results.add(inp_msg);}
 											}
 										}
 										succ_socket.close();
@@ -764,15 +774,15 @@ public class SimpleDynamoProvider extends ContentProvider {
 										cv.put(value, VALUE_I);
 
 										Uri t_uri = insert(mUri, cv, "I");
-										Log.d(TAG, "Inserted " + KEY_I);
+										Log.d(TAG, "Inserted " + KEY_I + "," + VALUE_I);
 
 										//new
 										String bucket = find_bucket(KEY_I).trim();
 										String k_v = KEY_I + "," + VALUE_I;
 										if (map.get(bucket) != null) {
-											if (!map.get(bucket).contains(k_v)) {
-												map.put(bucket, map.get(bucket).trim() + "," + KEY_I + "," + VALUE_I);
-											}
+											//if (!map.get(bucket).contains(k_v)) {
+											map.put(bucket, map.get(bucket).trim() + "," + KEY_I + "," + VALUE_I);
+											//}
 										} else {
 											map.put(bucket, KEY_I + "," + VALUE_I);
 										}
@@ -780,9 +790,9 @@ public class SimpleDynamoProvider extends ContentProvider {
 								}
 								Log.d(TAG, "Final result string: " + result);
 								Log.d(RECOVERY, "Recovery complete");
-							}
+						//	}
 
-                        }
+						}
 
 						else if (TAG_input.equals(NEW_NODE)) {
 							//update remote ports
@@ -959,30 +969,30 @@ public class SimpleDynamoProvider extends ContentProvider {
 		}
 	}
 
-    private String find_bucket(String key_i) {
-        int coordinator = -1;
-        ArrayList<String> hashed_ports = new ArrayList<String>(5);
-        String hash_key = "";
-        try {
-            hash_key = genHash(key_i);
-            for(String i : REMOTE_PORTS.split(",")){
-                hashed_ports.add(genHash(i.trim()));
-            }
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
+	private String find_bucket(String key_i) {
+		int coordinator = -1;
+		ArrayList<String> hashed_ports = new ArrayList<String>(5);
+		String hash_key = "";
+		try {
+			hash_key = genHash(key_i);
+			for(String i : REMOTE_PORTS.split(",")){
+				hashed_ports.add(genHash(i.trim()));
+			}
+		} catch (NoSuchAlgorithmException e) {
+			e.printStackTrace();
+		}
 
-        if(hash_key.compareTo(hashed_ports.get(0))<= 0){ coordinator = 0;}
-        else if(hash_key.compareTo(hashed_ports.get(1))<= 0){ coordinator = 1;}
-        else if(hash_key.compareTo(hashed_ports.get(2))<= 0){ coordinator = 2;}
-        else if(hash_key.compareTo(hashed_ports.get(3))<= 0){ coordinator = 3;}
-        else if(hash_key.compareTo(hashed_ports.get(4))<= 0){ coordinator = 4;}
-        else{coordinator = 0;}
+		if(hash_key.compareTo(hashed_ports.get(0))<= 0){ coordinator = 0;}
+		else if(hash_key.compareTo(hashed_ports.get(1))<= 0){ coordinator = 1;}
+		else if(hash_key.compareTo(hashed_ports.get(2))<= 0){ coordinator = 2;}
+		else if(hash_key.compareTo(hashed_ports.get(3))<= 0){ coordinator = 3;}
+		else if(hash_key.compareTo(hashed_ports.get(4))<= 0){ coordinator = 4;}
+		else{coordinator = 0;}
 
-        return REMOTE_PORTS.split(",")[coordinator];
-    }
+		return REMOTE_PORTS.split(",")[coordinator];
+	}
 
-    private String cursor_to_string(Cursor cursor) {
+	private String cursor_to_string(Cursor cursor) {
 		String msg_pair_collection = "";
 		while(cursor.moveToNext()){
 			if(!msg_pair_collection.equals("")){
@@ -1046,17 +1056,17 @@ public class SimpleDynamoProvider extends ContentProvider {
 		}
 	}
 
-    private String genHash(String input) throws NoSuchAlgorithmException {
-        MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
-        byte[] sha1Hash = sha1.digest(input.getBytes());
-        Formatter formatter = new Formatter();
-        for (byte b : sha1Hash) {
-            formatter.format("%02x", b);
-        }
-        return formatter.toString();
-    }
+	private String genHash(String input) throws NoSuchAlgorithmException {
+		MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
+		byte[] sha1Hash = sha1.digest(input.getBytes());
+		Formatter formatter = new Formatter();
+		for (byte b : sha1Hash) {
+			formatter.format("%02x", b);
+		}
+		return formatter.toString();
+	}
 
-    public boolean check(){
+	public boolean check(){
 		try {
 			Socket new_socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}), Integer.parseInt("5556") * 2);
 			DataOutputStream succ_out = new DataOutputStream(new_socket.getOutputStream());
