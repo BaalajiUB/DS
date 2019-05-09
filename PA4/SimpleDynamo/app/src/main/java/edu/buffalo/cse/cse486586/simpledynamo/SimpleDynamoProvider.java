@@ -252,6 +252,13 @@ public class SimpleDynamoProvider extends ContentProvider {
 		Cursor cursor = null;
 
 		if(selection.equals("@")){
+			try {
+				Thread.sleep(100);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+			Log.d(QUERY,"QUERY @");
+
 			cursor =  db.rawQuery("select * from " + TABLE_NAME, null);
 		}
 
@@ -302,6 +309,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 		}
 
 		else{
+		    Log.d(QUERY, selection);
 			ArrayList<String> hashed_ports = new ArrayList<String>(5);
 			int coordinator = -1;
 			String hash_key = "";
@@ -837,6 +845,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else if(TAG_input.equals(INSERT)){
+							Thread.sleep(100);
 							ContentValues cv = new ContentValues();
 							String[] key_val = payload.split(",");
 							String KEY_I = key_val[0].trim();
@@ -863,6 +872,7 @@ public class SimpleDynamoProvider extends ContentProvider {
 						}
 
 						else if(TAG_input.equals(QUERY_SINGLE)){
+							Thread.sleep(100);
 							String TAG = QUERY_SINGLE;
 							String return_msg = "";
 							String KEY_I = payload.trim();
